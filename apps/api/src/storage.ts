@@ -1,7 +1,13 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { ClipJson, JobState, VideoMetadata } from "./types";
+import type {
+  ClipJson,
+  JobState,
+  StoredVideoSummary,
+  TranscriptJson,
+  VideoMetadata,
+} from "./types";
 
 const rootDir = path.resolve(import.meta.dir, "../../..");
 export const storageRoot = path.join(rootDir, "storage");
@@ -85,6 +91,82 @@ export async function getClipById(videoId: string, clipId: string) {
   const paths = videoPaths(videoId);
   const clips = await readJsonFile<ClipJson[]>(paths.clipsJson);
   return clips?.find((clip) => clip.id === clipId);
+}
+
+export async function listStoredVideos(): Promise<StoredVideoSummary[]> {
+  const videosRoot = path.join(storageRoot, "videos");
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+  const summaries = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const videoId = entry.name;
+        const paths = videoPaths(videoId);
+        const [metadata, job, transcript, clips] = await Promise.all([
+          readJsonFile<VideoMetadata>(paths.metadataJson),
+          readJsonFile<JobState>(paths.jobJson),
+          readJsonFile<TranscriptJson>(paths.transcriptJson),
+          readJsonFile<ClipJson[]>(paths.clipsJson),
+        ]);
+
+        return {
+          id: videoId,
+          title: metadata?.originalFilename || videoId,
+          status: job?.status || (transcript && clips ? "complete" : "failed"),
+          progress: job?.progress || (transcript && clips ? 100 : 0),
+          durationMs: metadata?.durationMs || transcript?.durationMs,
+          clipCount: clips?.length || 0,
+          hasTranscript: Boolean(transcript),
+          createdAt: metadata?.createdAt || job?.createdAt,
+          updatedAt: job?.updatedAt,
+        } satisfies StoredVideoSummary;
+      }),
+  );
+
+  return summaries.sort((a, b) => {
+    const aTime = Date.parse(a.updatedAt || a.createdAt || "");
+    const bTime = Date.parse(b.updatedAt || b.createdAt || "");
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
+}
+
+export async function readStoredVideoJob(videoId: string): Promise<JobState | undefined> {
+  const paths = videoPaths(videoId);
+  const [metadata, job, transcript, clips] = await Promise.all([
+    readJsonFile<VideoMetadata>(paths.metadataJson),
+    readJsonFile<JobState>(paths.jobJson),
+    readJsonFile<TranscriptJson>(paths.transcriptJson),
+    readJsonFile<ClipJson[]>(paths.clipsJson),
+  ]);
+
+  if (!metadata && !job) {
+    return undefined;
+  }
+
+  if (job?.result) {
+    return job;
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    jobId: job?.jobId || `cached_${videoId}`,
+    videoId,
+    status: job?.status || (transcript && clips ? "complete" : "failed"),
+    progress: job?.progress || (transcript && clips ? 100 : 0),
+    message: transcript && clips ? "Loaded from local development storage." : "Cached video is incomplete.",
+    createdAt: job?.createdAt || metadata?.createdAt || now,
+    updatedAt: job?.updatedAt || now,
+    error: job?.error,
+    result:
+      metadata && transcript && clips
+        ? {
+            video: metadata,
+            transcript,
+            clips,
+          }
+        : undefined,
+  };
 }
 
 export async function readJsonFile<T>(filePath: string): Promise<T | undefined> {

@@ -78,6 +78,18 @@ export type ClipJson = {
   mediaUrl?: string;
 };
 
+export type StoredVideoSummary = {
+  id: string;
+  title: string;
+  status: JobStatus;
+  progress: number;
+  durationMs?: number;
+  clipCount: number;
+  hasTranscript: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type SmallestPulseResponse = {
   status?: string;
   transcription?: string;

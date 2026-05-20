@@ -1,7 +1,15 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { createVideoRecord, getClipById, readJob, readJsonFile, videoPaths } from "./storage";
+import {
+  createVideoRecord,
+  getClipById,
+  listStoredVideos,
+  readJob,
+  readJsonFile,
+  readStoredVideoJob,
+  videoPaths,
+} from "./storage";
 import { startProcessing } from "./processor";
 import type { ClipJson, JobState, TranscriptJson } from "./types";
 
@@ -28,6 +36,30 @@ app.get("/health", (c) =>
     status: "ok",
   }),
 );
+
+app.get("/dev/videos", async (c) => {
+  if (!isDevelopmentMode()) {
+    return c.json({ error: "Development video library is disabled." }, 404);
+  }
+
+  const videos = await listStoredVideos();
+  return c.json({ videos });
+});
+
+app.get("/dev/videos/:videoId", async (c) => {
+  if (!isDevelopmentMode()) {
+    return c.json({ error: "Development video library is disabled." }, 404);
+  }
+
+  const videoId = c.req.param("videoId");
+  const job = await readStoredVideoJob(videoId);
+
+  if (!job) {
+    return c.json({ error: "Stored video not found." }, 404);
+  }
+
+  return c.json(withPublicUrls(job));
+});
 
 app.post("/videos/process", async (c) => {
   const form = await c.req.formData();
@@ -148,6 +180,15 @@ function withClipUrl(videoId: string, clip: ClipJson) {
     ...clip,
     mediaUrl: clip.outputPath ? `/videos/${videoId}/clips/${clip.id}/file` : undefined,
   };
+}
+
+function isDevelopmentMode() {
+  return (
+    process.env.APP_ENV === "dev" ||
+    process.env.NODE_ENV === "development" ||
+    process.env.npm_lifecycle_event === "dev" ||
+    process.argv.includes("--watch")
+  );
 }
 
 const port = Number(process.env.PORT || 3001);
