@@ -3,10 +3,21 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev:api": "bun run --cwd apps/api dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "typecheck:api": "bun run --cwd apps/api typecheck",
+    "lint:web": "bun run --cwd apps/web lint",
+    "typecheck:web": "bun run --cwd apps/web typecheck"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
-  }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }
