@@ -14,6 +14,7 @@ import {
   Sparkles,
   UploadCloud,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type JobStatus =
   | "queued"
@@ -25,7 +26,12 @@ type JobStatus =
   | "complete"
   | "failed";
 
-type ReframeJobStatus = "queued" | "analyzing" | "rendering" | "complete" | "failed";
+type ReframeJobStatus =
+  | "queued"
+  | "analyzing"
+  | "rendering"
+  | "complete"
+  | "failed";
 type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
 type ReframeMode = "normal" | "smart";
 type NormalReframeStrategy = "crop" | "blur-background" | "pad";
@@ -107,7 +113,8 @@ type StoredVideoSummary = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const SHOW_DEV_LIBRARY =
-  process.env.NEXT_PUBLIC_APP_ENV === "dev" || process.env.NODE_ENV === "development";
+  process.env.NEXT_PUBLIC_APP_ENV === "dev" ||
+  process.env.NODE_ENV === "development";
 const POLL_INTERVAL_MS = 5_000;
 
 export default function Home() {
@@ -115,7 +122,8 @@ export default function Home() {
   const [language, setLanguage] = useState("en");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [reframeMode, setReframeMode] = useState<ReframeMode>("normal");
-  const [normalStrategy, setNormalStrategy] = useState<NormalReframeStrategy>("crop");
+  const [normalStrategy, setNormalStrategy] =
+    useState<NormalReframeStrategy>("crop");
   const [videoId, setVideoId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
   const [reframeJob, setReframeJob] = useState<ReframeJobState | null>(null);
@@ -128,7 +136,9 @@ export default function Home() {
     job && job.status !== "complete" && job.status !== "failed",
   );
   const isReframing = Boolean(
-    reframeJob && reframeJob.status !== "complete" && reframeJob.status !== "failed",
+    reframeJob &&
+    reframeJob.status !== "complete" &&
+    reframeJob.status !== "failed",
   );
   const isBusy = isProcessing || isReframing;
 
@@ -154,7 +164,9 @@ export default function Home() {
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/videos/${videoId}/status`);
+        const response = await fetch(
+          `${API_BASE_URL}/videos/${videoId}/status`,
+        );
         const payload = await response.json();
 
         if (!response.ok) {
@@ -163,7 +175,11 @@ export default function Home() {
 
         setJob(payload);
       } catch (pollError) {
-        setError(pollError instanceof Error ? pollError.message : "Status polling failed.");
+        setError(
+          pollError instanceof Error
+            ? pollError.message
+            : "Status polling failed.",
+        );
       }
     };
 
@@ -217,82 +233,78 @@ export default function Home() {
   // }, [reframeJob]);
 
   useEffect(() => {
-  if (!reframeJob?.jobId) {
-    return;
-  }
+    if (!reframeJob?.jobId) {
+      return;
+    }
 
-  let cancelled = false;
+    let cancelled = false;
 
-  const pollReframe = async () => {
-    while (!cancelled) {
-      try {
-        console.log("reframe polling");
-
-        const response = await fetch(
-          `${API_BASE_URL}/reframes/${reframeJob.jobId}/status`
-        );
-
-        // handle non-json server crashes
-        const text = await response.text();
-
-        let payload;
-
+    const pollReframe = async () => {
+      while (!cancelled) {
         try {
-          payload = text ? JSON.parse(text) : {};
-        } catch {
-          throw new Error("Server returned invalid JSON.");
-        }
+          console.log("reframe polling");
 
-        if (!response.ok) {
-          throw new Error(
-            payload.error || "Could not load reframe status."
+          const response = await fetch(
+            `${API_BASE_URL}/reframes/${reframeJob.jobId}/status`,
           );
-        }
 
-        setReframeJob(payload);
+          // handle non-json server crashes
+          const text = await response.text();
 
-        if (payload.status === "complete") {
-          if (payload.result) {
-            setJob({
-              jobId: `cached_${payload.videoId}`,
-              videoId: payload.videoId,
-              status: "complete",
-              progress: 100,
-              message: "Processing complete.",
-              result: payload.result,
-            });
+          let payload;
+
+          try {
+            payload = text ? JSON.parse(text) : {};
+          } catch {
+            throw new Error("Server returned invalid JSON.");
           }
 
+          if (!response.ok) {
+            throw new Error(payload.error || "Could not load reframe status.");
+          }
+
+          setReframeJob(payload);
+
+          if (payload.status === "complete") {
+            if (payload.result) {
+              setJob({
+                jobId: `cached_${payload.videoId}`,
+                videoId: payload.videoId,
+                status: "complete",
+                progress: 100,
+                message: "Processing complete.",
+                result: payload.result,
+              });
+            }
+
+            break;
+          }
+
+          if (payload.status === "failed") {
+            break;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        } catch (pollError) {
+          console.error(pollError);
+
+          setError(
+            pollError instanceof Error
+              ? pollError.message
+              : "Reframe polling failed.",
+          );
+
           break;
         }
-
-        if (payload.status === "failed") {
-          break;
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, POLL_INTERVAL_MS)
-        );
-      } catch (pollError) {
-        console.error(pollError);
-
-        setError(
-          pollError instanceof Error
-            ? pollError.message
-            : "Reframe polling failed."
-        );
-
-        break;
       }
-    }
-  };
+    };
 
-  void pollReframe();
+    void pollReframe();
 
-  return () => {
-    cancelled = true;
-  };
-}, [reframeJob?.jobId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [reframeJob?.jobId]);
 
   async function loadStoredVideos() {
     setIsLoadingStoredVideos(true);
@@ -307,7 +319,11 @@ export default function Home() {
 
       setStoredVideos(payload.videos || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Stored videos failed to load.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Stored videos failed to load.",
+      );
     } finally {
       setIsLoadingStoredVideos(false);
     }
@@ -319,7 +335,9 @@ export default function Home() {
     setReframeJob(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/dev/videos/${selectedVideoId}`);
+      const response = await fetch(
+        `${API_BASE_URL}/dev/videos/${selectedVideoId}`,
+      );
       const payload = await response.json();
 
       if (!response.ok) {
@@ -330,7 +348,11 @@ export default function Home() {
       setVideoId(payload.videoId);
       setJob(payload);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Stored video failed to load.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Stored video failed to load.",
+      );
     } finally {
       setIsLoadingStoredVideos(false);
     }
@@ -380,7 +402,9 @@ export default function Home() {
         void loadStoredVideos();
       }
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
+      setError(
+        uploadError instanceof Error ? uploadError.message : "Upload failed.",
+      );
     } finally {
       setIsUploading(false);
     }
@@ -395,17 +419,20 @@ export default function Home() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/videos/${job.videoId}/reframe`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${API_BASE_URL}/videos/${job.videoId}/reframe`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            aspectRatio,
+            reframeMode,
+            normalStrategy,
+          }),
         },
-        body: JSON.stringify({
-          aspectRatio,
-          reframeMode,
-          normalStrategy,
-        }),
-      });
+      );
       const payload = await response.json();
 
       if (!response.ok) {
@@ -420,20 +447,32 @@ export default function Home() {
         message: "Queued reframe render.",
       });
     } catch (reframeError) {
-      setError(reframeError instanceof Error ? reframeError.message : "Reframe failed to start.");
+      setError(
+        reframeError instanceof Error
+          ? reframeError.message
+          : "Reframe failed to start.",
+      );
     }
   }
 
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-zinc-950">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-3 border-b border-zinc-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-emerald-700">Clip Farm MVP</p>
-            <h1 className="text-2xl font-semibold sm:text-3xl">Video to transcript clips</h1>
+            <p className="text-sm font-medium text-emerald-700">
+              Clip Farm MVP
+            </p>
+            <h1 className="text-2xl font-semibold sm:text-3xl">
+              Video to transcript clips
+            </h1>
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-600">
-            {isBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {isBusy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
             <span>Polling every 5 seconds</span>
           </div>
         </header>
@@ -455,7 +494,20 @@ export default function Home() {
               onNormalStrategyChange={setNormalStrategy}
               onSubmit={handleSubmit}
             />
-
+            <PreviewPanel
+              job={job}
+              originalVideoUrl={originalVideoUrl}
+              aspectRatio={aspectRatio}
+              reframeMode={reframeMode}
+              normalStrategy={normalStrategy}
+              isReframing={isReframing}
+              onAspectRatioChange={setAspectRatio}
+              onReframeModeChange={setReframeMode}
+              onNormalStrategyChange={setNormalStrategy}
+              onReframe={handleReframe}
+            />
+          </div>
+          <div className="flex flex-col gap-4">
             {SHOW_DEV_LIBRARY ? (
               <StoredVideosPanel
                 videos={storedVideos}
@@ -467,23 +519,12 @@ export default function Home() {
             ) : null}
 
             <StatusPanel job={job} reframeJob={reframeJob} error={error} />
+            <TranscriptPanel
+              segments={job?.result?.transcript.segments || []}
+              className=""
+            />
           </div>
-
-          <PreviewPanel
-            job={job}
-            originalVideoUrl={originalVideoUrl}
-            aspectRatio={aspectRatio}
-            reframeMode={reframeMode}
-            normalStrategy={normalStrategy}
-            isReframing={isReframing}
-            onAspectRatioChange={setAspectRatio}
-            onReframeModeChange={setReframeMode}
-            onNormalStrategyChange={setNormalStrategy}
-            onReframe={handleReframe}
-          />
         </section>
-
-        <TranscriptPanel segments={job?.result?.transcript.segments || []} />
 
         <ClipsPanel
           clips={job?.result?.clips || []}
@@ -524,14 +565,19 @@ function UploadPanel({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form onSubmit={onSubmit} className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <form
+      onSubmit={onSubmit}
+      className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+    >
       <div className="mb-4 flex items-center gap-2">
         <UploadCloud className="size-5 text-emerald-700" />
         <h2 className="text-base font-semibold">Upload</h2>
       </div>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">Video file</span>
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Video file
+        </span>
         <input
           type="file"
           accept="video/*"
@@ -541,7 +587,9 @@ function UploadPanel({
       </label>
 
       <label className="mt-4 block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">Transcript language</span>
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Transcript language
+        </span>
         <select
           value={language}
           onChange={(event) => onLanguageChange(event.target.value)}
@@ -570,12 +618,18 @@ function UploadPanel({
         disabled={!file || isUploading || isBusy}
         className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isUploading ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
+        {isUploading ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <UploadCloud className="size-4" />
+        )}
         {isUploading ? "Uploading" : "Process video"}
       </button>
 
       {file ? (
-        <p className="mt-3 truncate text-xs text-zinc-500">Selected: {file.name}</p>
+        <p className="mt-3 truncate text-xs text-zinc-500">
+          Selected: {file.name}
+        </p>
       ) : null}
     </form>
   );
@@ -599,10 +653,14 @@ function ReframeControls({
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">Aspect ratio</span>
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Aspect ratio
+        </span>
         <select
           value={aspectRatio}
-          onChange={(event) => onAspectRatioChange(event.target.value as AspectRatio)}
+          onChange={(event) =>
+            onAspectRatioChange(event.target.value as AspectRatio)
+          }
           className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
         >
           <option value="9:16">9:16 Shorts</option>
@@ -613,10 +671,14 @@ function ReframeControls({
       </label>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">Mode</span>
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Mode
+        </span>
         <select
           value={reframeMode}
-          onChange={(event) => onReframeModeChange(event.target.value as ReframeMode)}
+          onChange={(event) =>
+            onReframeModeChange(event.target.value as ReframeMode)
+          }
           className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
         >
           <option value="normal">Normal FFmpeg</option>
@@ -625,10 +687,14 @@ function ReframeControls({
       </label>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">Normal style</span>
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Normal style
+        </span>
         <select
           value={normalStrategy}
-          onChange={(event) => onNormalStrategyChange(event.target.value as NormalReframeStrategy)}
+          onChange={(event) =>
+            onNormalStrategyChange(event.target.value as NormalReframeStrategy)
+          }
           disabled={reframeMode === "smart"}
           className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
         >
@@ -667,7 +733,11 @@ function StoredVideosPanel({
           disabled={isLoading}
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200 bg-white px-2.5 text-xs font-medium text-emerald-800 disabled:opacity-50"
         >
-          {isLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          {isLoading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
           Refresh
         </button>
       </div>
@@ -685,14 +755,20 @@ function StoredVideosPanel({
             type="button"
             onClick={() => onSelect(video.id)}
             className={`w-full rounded-md border bg-white p-3 text-left transition hover:border-emerald-500 ${
-              activeVideoId === video.id ? "border-emerald-600" : "border-emerald-200"
+              activeVideoId === video.id
+                ? "border-emerald-600"
+                : "border-emerald-200"
             }`}
           >
-            <span className="block truncate text-sm font-medium text-zinc-900">{video.title}</span>
+            <span className="block truncate text-sm font-medium text-zinc-900">
+              {video.title}
+            </span>
             <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-600">
               <span>{video.status.replaceAll("_", " ")}</span>
               <span>{video.clipCount} clips</span>
-              {video.durationMs ? <span>{formatTime(video.durationMs)}</span> : null}
+              {video.durationMs ? (
+                <span>{formatTime(video.durationMs)}</span>
+              ) : null}
             </span>
           </button>
         ))}
@@ -710,7 +786,8 @@ function StatusPanel({
   reframeJob: ReframeJobState | null;
   error: string | null;
 }) {
-  const active = reframeJob && reframeJob.status !== "complete" ? reframeJob : job;
+  const active =
+    reframeJob && reframeJob.status !== "complete" ? reframeJob : job;
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
@@ -735,7 +812,9 @@ function StatusPanel({
             {error || active?.error || active?.message || "Waiting for upload."}
           </p>
         </div>
-        <span className="text-sm font-medium text-zinc-500">{active?.progress || 0}%</span>
+        <span className="text-sm font-medium text-zinc-500">
+          {active?.progress || 0}%
+        </span>
       </div>
     </section>
   );
@@ -776,7 +855,9 @@ function PreviewPanel({
         </div>
         <div className="flex items-center gap-2">
           {job?.result?.transcript.durationMs ? (
-            <span className="text-xs text-zinc-500">{formatTime(job.result.transcript.durationMs)}</span>
+            <span className="text-xs text-zinc-500">
+              {formatTime(job.result.transcript.durationMs)}
+            </span>
           ) : null}
           <button
             type="button"
@@ -791,7 +872,11 @@ function PreviewPanel({
       </div>
 
       {originalVideoUrl ? (
-        <video src={originalVideoUrl} controls className="aspect-video w-full rounded-md bg-black" />
+        <video
+          src={originalVideoUrl}
+          controls
+          className="aspect-video w-full rounded-md bg-black"
+        />
       ) : (
         <div className="flex aspect-video items-center justify-center rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500">
           Upload a video or open a stored one.
@@ -818,15 +903,22 @@ function PreviewPanel({
             disabled={isReframing}
             className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isReframing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {isReframing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
             Update clips
           </button>
         </div>
       ) : null}
 
       {job?.result?.video ? (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4">
-          <MetaChip label="File" value={job.result.video.originalFilename || job.videoId} />
+        <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4">
+          <MetaChip
+            label="File"
+            value={job.result.video.originalFilename || job.videoId}
+          />
           <MetaChip
             label="Source size"
             value={
@@ -850,15 +942,25 @@ function PreviewPanel({
   );
 }
 
-function TranscriptPanel({ segments }: { segments: TranscriptSegment[] }) {
+interface TranscriptPanelProps {
+  segments: TranscriptSegment[];
+  className?: string; // optional
+}
+
+function TranscriptPanel({ segments, className = "" }: TranscriptPanelProps) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <section
+      className={cn(
+        "rounded-lg border border-zinc-200 bg-white p-4 shadow-sm",
+        className,
+      )}
+    >
       <div className="mb-3 flex items-center gap-2">
         <FileText className="size-5 text-violet-700" />
         <h2 className="text-base font-semibold">Transcript</h2>
       </div>
 
-      <div className="grid max-h-[420px] gap-2 overflow-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+      <div className="max-h-[420px] space-y-3 overflow-auto pr-1 ">
         {segments.length === 0 ? (
           <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
             Timestamped transcript segments will appear here.
@@ -880,7 +982,9 @@ function ClipsPanel({
   clips: ClipResult[];
   segments: TranscriptSegment[];
 }) {
-  const [expandedClipIds, setExpandedClipIds] = useState<Set<string>>(new Set());
+  const [expandedClipIds, setExpandedClipIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   function toggleClip(clipId: string) {
     setExpandedClipIds((current) => {
@@ -943,6 +1047,14 @@ function ClipCard({
   onToggle: () => void;
 }) {
   const mediaUrl = absoluteApiUrl(clip.mediaUrl);
+  const layoutClass =
+    clip.aspectRatio === "9:16"
+      ? "lg:grid-cols-[260px_1fr]"
+      : clip.aspectRatio === "4:5"
+        ? "lg:grid-cols-[340px_1fr]"
+        : clip.aspectRatio === "1:1"
+          ? "lg:grid-cols-[420px_1fr]"
+          : "lg:grid-cols-[minmax(320px,620px)_1fr]";
 
   return (
     <article className="rounded-lg border border-zinc-200 p-4">
@@ -956,10 +1068,15 @@ function ClipCard({
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(320px,620px)_1fr]">
+      {/* <div className="grid gap-4 lg:grid-cols-[minmax(320px,620px)_1fr]"> */}
+      <div className={`grid gap-4 ${layoutClass}`}>
         <div className={`w-fit`}>
           {mediaUrl ? (
-            <video src={mediaUrl} controls className={`aspect-auto w-full rounded-md bg-black ${clip.aspectRatio === "16:9" ? "w-full" : ""} ${clip.aspectRatio === "9:16" ? "max-w-60 " : ""} ${clip.aspectRatio === "4:5" ? "" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}/>
+            <video
+              src={mediaUrl}
+              controls
+              className={`aspect-auto w-full rounded-md bg-black ${clip.aspectRatio === "16:9" ? "w-full" : ""} ${clip.aspectRatio === "9:16" ? "max-w-60 " : ""} ${clip.aspectRatio === "4:5" ? "max-w-sm" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}
+            />
           ) : (
             <div className="flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500">
               Clip video not rendered yet.
@@ -976,12 +1093,18 @@ function ClipCard({
             <MetaChip label="Mode" value={formatMode(clip)} />
             <MetaChip
               label="Output"
-              value={clip.outputWidth && clip.outputHeight ? `${clip.outputWidth}x${clip.outputHeight}` : "MP4"}
+              value={
+                clip.outputWidth && clip.outputHeight
+                  ? `${clip.outputWidth}x${clip.outputHeight}`
+                  : "MP4"
+              }
             />
           </div>
 
           <p className="rounded-md bg-zinc-50 p-3 text-sm leading-6 text-zinc-700">
-            {segments[0]?.text || clip.transcriptText || "Transcript unavailable."}
+            {segments[0]?.text ||
+              clip.transcriptText ||
+              "Transcript unavailable."}
           </p>
         </div>
       </div>
@@ -991,14 +1114,20 @@ function ClipCard({
         onClick={onToggle}
         className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
       >
-        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        {isExpanded ? (
+          <ChevronDown className="size-4" />
+        ) : (
+          <ChevronRight className="size-4" />
+        )}
         Clip transcript
       </button>
 
       {isExpanded ? (
         <div className="mt-3 max-h-80 space-y-2 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 p-3">
           {segments.length === 0 ? (
-            <p className="text-sm text-zinc-500">No timestamped transcript rows found for this clip.</p>
+            <p className="text-sm text-zinc-500">
+              No timestamped transcript rows found for this clip.
+            </p>
           ) : null}
 
           {segments.map((segment) => (
@@ -1024,14 +1153,18 @@ function TranscriptRow({ segment }: { segment: TranscriptSegment }) {
 function MetaChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-      <p className="text-[11px] font-medium uppercase tracking-normal text-zinc-500">{label}</p>
+      <p className="text-[11px] font-medium uppercase tracking-normal text-zinc-500">
+        {label}
+      </p>
       <p className="mt-1 truncate text-sm font-medium text-zinc-900">{value}</p>
     </div>
   );
 }
 
 function getClipSegments(clip: ClipResult, segments: TranscriptSegment[]) {
-  return segments.filter((segment) => segment.endMs > clip.startMs && segment.startMs < clip.endMs);
+  return segments.filter(
+    (segment) => segment.endMs > clip.startMs && segment.startMs < clip.endMs,
+  );
 }
 
 function formatMode(clip: ClipResult) {
