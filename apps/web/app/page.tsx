@@ -150,6 +150,8 @@ export default function Home() {
       return;
     }
 
+    console.log("normal video process");
+
     const pollStatus = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/videos/${videoId}/status`);
@@ -166,50 +168,131 @@ export default function Home() {
     };
 
     void pollStatus();
+    console.log("normal video process checks done");
     const intervalId = window.setInterval(pollStatus, POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [videoId, job?.status]);
 
-  useEffect(() => {
-    if (!reframeJob || reframeJob.status === "complete" || reframeJob.status === "failed") {
-      return;
-    }
+  // useEffect(() => {
+  //   if (!reframeJob || reframeJob.status === "complete" || reframeJob.status === "failed") {
+  //     return;
+  //   }
+  //   console.log("reframe video process");
 
-    const pollReframe = async () => {
+  //   const pollReframe = async () => {
+  //     try {
+  //       const response = await fetch(`${API_BASE_URL}/reframes/${reframeJob.jobId}/status`);
+  //       const payload = await response.json();
+
+  //       if (!response.ok) {
+  //         throw new Error(payload.error || "Could not load reframe status.");
+  //       }
+
+  //       setReframeJob(payload);
+
+  //       if (payload.status === "complete" && payload.result) {
+  //         setJob({
+  //           jobId: `cached_${payload.videoId}`,
+  //           videoId: payload.videoId,
+  //           status: "complete",
+  //           progress: 100,
+  //           message: "Processing complete.",
+  //           result: payload.result,
+  //         });
+  //         if (SHOW_DEV_LIBRARY) {
+  //           void loadStoredVideos();
+  //         }
+  //       }
+  //     } catch (pollError) {
+  //       setError(pollError instanceof Error ? pollError.message : "Reframe polling failed.");
+  //     }
+  //   };
+
+  //   void pollReframe();
+  //   const intervalId = window.setInterval(pollReframe, POLL_INTERVAL_MS);
+  //  console.log("reframe video process checks done");
+
+  //   return () => window.clearInterval(intervalId);
+  // }, [reframeJob]);
+
+  useEffect(() => {
+  if (!reframeJob?.jobId) {
+    return;
+  }
+
+  let cancelled = false;
+
+  const pollReframe = async () => {
+    while (!cancelled) {
       try {
-        const response = await fetch(`${API_BASE_URL}/reframes/${reframeJob.jobId}/status`);
-        const payload = await response.json();
+        console.log("reframe polling");
+
+        const response = await fetch(
+          `${API_BASE_URL}/reframes/${reframeJob.jobId}/status`
+        );
+
+        // handle non-json server crashes
+        const text = await response.text();
+
+        let payload;
+
+        try {
+          payload = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error("Server returned invalid JSON.");
+        }
 
         if (!response.ok) {
-          throw new Error(payload.error || "Could not load reframe status.");
+          throw new Error(
+            payload.error || "Could not load reframe status."
+          );
         }
 
         setReframeJob(payload);
 
-        if (payload.status === "complete" && payload.result) {
-          setJob({
-            jobId: `cached_${payload.videoId}`,
-            videoId: payload.videoId,
-            status: "complete",
-            progress: 100,
-            message: "Processing complete.",
-            result: payload.result,
-          });
-          if (SHOW_DEV_LIBRARY) {
-            void loadStoredVideos();
+        if (payload.status === "complete") {
+          if (payload.result) {
+            setJob({
+              jobId: `cached_${payload.videoId}`,
+              videoId: payload.videoId,
+              status: "complete",
+              progress: 100,
+              message: "Processing complete.",
+              result: payload.result,
+            });
           }
+
+          break;
         }
+
+        if (payload.status === "failed") {
+          break;
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, POLL_INTERVAL_MS)
+        );
       } catch (pollError) {
-        setError(pollError instanceof Error ? pollError.message : "Reframe polling failed.");
+        console.error(pollError);
+
+        setError(
+          pollError instanceof Error
+            ? pollError.message
+            : "Reframe polling failed."
+        );
+
+        break;
       }
-    };
+    }
+  };
 
-    void pollReframe();
-    const intervalId = window.setInterval(pollReframe, POLL_INTERVAL_MS);
+  void pollReframe();
 
-    return () => window.clearInterval(intervalId);
-  }, [reframeJob]);
+  return () => {
+    cancelled = true;
+  };
+}, [reframeJob?.jobId]);
 
   async function loadStoredVideos() {
     setIsLoadingStoredVideos(true);
@@ -874,9 +957,9 @@ function ClipCard({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(320px,620px)_1fr]">
-        <div className="w-full max-w-2xl">
+        <div className={`w-fit`}>
           {mediaUrl ? (
-            <video src={mediaUrl} controls className="aspect-video w-full rounded-md bg-black" />
+            <video src={mediaUrl} controls className={`aspect-auto w-full rounded-md bg-black ${clip.aspectRatio === "16:9" ? "w-full" : ""} ${clip.aspectRatio === "9:16" ? "max-w-60 " : ""} ${clip.aspectRatio === "4:5" ? "" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}/>
           ) : (
             <div className="flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500">
               Clip video not rendered yet.
