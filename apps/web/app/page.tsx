@@ -10,6 +10,8 @@ import {
   Loader2,
   RefreshCw,
   Scissors,
+  Settings2,
+  Sparkles,
   UploadCloud,
 } from "lucide-react";
 
@@ -22,6 +24,11 @@ type JobStatus =
   | "rendering_clips"
   | "complete"
   | "failed";
+
+type ReframeJobStatus = "queued" | "analyzing" | "rendering" | "complete" | "failed";
+type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
+type ReframeMode = "normal" | "smart";
+type NormalReframeStrategy = "crop" | "blur-background" | "pad";
 
 type TranscriptSegment = {
   id: string;
@@ -41,6 +48,29 @@ type ClipResult = {
   source: "random_mvp";
   status: "suggested" | "rendered" | "failed";
   mediaUrl?: string;
+  aspectRatio?: AspectRatio;
+  reframeMode?: ReframeMode;
+  normalStrategy?: NormalReframeStrategy;
+  outputWidth?: number;
+  outputHeight?: number;
+  renderVersion?: string;
+};
+
+type ProcessResult = {
+  originalVideoUrl?: string;
+  video?: {
+    originalFilename?: string;
+    width?: number;
+    height?: number;
+    codec?: string;
+    durationMs?: number;
+  };
+  transcript: {
+    text: string;
+    segments: TranscriptSegment[];
+    durationMs?: number;
+  };
+  clips: ClipResult[];
 };
 
 type JobState = {
@@ -50,22 +80,17 @@ type JobState = {
   progress: number;
   message: string;
   error?: string;
-  result?: {
-    originalVideoUrl?: string;
-    video?: {
-      originalFilename?: string;
-      width?: number;
-      height?: number;
-      codec?: string;
-      durationMs?: number;
-    };
-    transcript: {
-      text: string;
-      segments: TranscriptSegment[];
-      durationMs?: number;
-    };
-    clips: ClipResult[];
-  };
+  result?: ProcessResult;
+};
+
+type ReframeJobState = {
+  jobId: string;
+  videoId: string;
+  status: ReframeJobStatus;
+  progress: number;
+  message: string;
+  error?: string;
+  result?: ProcessResult;
 };
 
 type StoredVideoSummary = {
@@ -88,8 +113,12 @@ const POLL_INTERVAL_MS = 5_000;
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [language, setLanguage] = useState("en");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
+  const [reframeMode, setReframeMode] = useState<ReframeMode>("normal");
+  const [normalStrategy, setNormalStrategy] = useState<NormalReframeStrategy>("crop");
   const [videoId, setVideoId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
+  const [reframeJob, setReframeJob] = useState<ReframeJobState | null>(null);
   const [storedVideos, setStoredVideos] = useState<StoredVideoSummary[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingStoredVideos, setIsLoadingStoredVideos] = useState(false);
@@ -98,6 +127,10 @@ export default function Home() {
   const isProcessing = Boolean(
     job && job.status !== "complete" && job.status !== "failed",
   );
+  const isReframing = Boolean(
+    reframeJob && reframeJob.status !== "complete" && reframeJob.status !== "failed",
+  );
+  const isBusy = isProcessing || isReframing;
 
   const originalVideoUrl = useMemo(
     () => absoluteApiUrl(job?.result?.originalVideoUrl),
@@ -138,6 +171,46 @@ export default function Home() {
     return () => window.clearInterval(intervalId);
   }, [videoId, job?.status]);
 
+  useEffect(() => {
+    if (!reframeJob || reframeJob.status === "complete" || reframeJob.status === "failed") {
+      return;
+    }
+
+    const pollReframe = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/reframes/${reframeJob.jobId}/status`);
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not load reframe status.");
+        }
+
+        setReframeJob(payload);
+
+        if (payload.status === "complete" && payload.result) {
+          setJob({
+            jobId: `cached_${payload.videoId}`,
+            videoId: payload.videoId,
+            status: "complete",
+            progress: 100,
+            message: "Processing complete.",
+            result: payload.result,
+          });
+          if (SHOW_DEV_LIBRARY) {
+            void loadStoredVideos();
+          }
+        }
+      } catch (pollError) {
+        setError(pollError instanceof Error ? pollError.message : "Reframe polling failed.");
+      }
+    };
+
+    void pollReframe();
+    const intervalId = window.setInterval(pollReframe, POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [reframeJob]);
+
   async function loadStoredVideos() {
     setIsLoadingStoredVideos(true);
 
@@ -160,6 +233,7 @@ export default function Home() {
   async function loadStoredVideo(selectedVideoId: string) {
     setError(null);
     setIsLoadingStoredVideos(true);
+    setReframeJob(null);
 
     try {
       const response = await fetch(`${API_BASE_URL}/dev/videos/${selectedVideoId}`);
@@ -190,11 +264,15 @@ export default function Home() {
     setIsUploading(true);
     setError(null);
     setJob(null);
+    setReframeJob(null);
 
     try {
       const body = new FormData();
       body.append("video", file);
       body.append("language", language);
+      body.append("aspectRatio", aspectRatio);
+      body.append("reframeMode", reframeMode);
+      body.append("normalStrategy", normalStrategy);
 
       const response = await fetch(`${API_BASE_URL}/videos/process`, {
         method: "POST",
@@ -225,6 +303,44 @@ export default function Home() {
     }
   }
 
+  async function handleReframe() {
+    if (!job?.videoId || !job.result) {
+      setError("Open a processed video before updating clip framing.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/videos/${job.videoId}/reframe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          aspectRatio,
+          reframeMode,
+          normalStrategy,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not start reframe.");
+      }
+
+      setReframeJob({
+        jobId: payload.jobId,
+        videoId: payload.videoId,
+        status: "queued",
+        progress: 1,
+        message: "Queued reframe render.",
+      });
+    } catch (reframeError) {
+      setError(reframeError instanceof Error ? reframeError.message : "Reframe failed to start.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-zinc-950">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -234,7 +350,7 @@ export default function Home() {
             <h1 className="text-2xl font-semibold sm:text-3xl">Video to transcript clips</h1>
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-600">
-            {isProcessing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {isBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             <span>Polling every 5 seconds</span>
           </div>
         </header>
@@ -244,10 +360,16 @@ export default function Home() {
             <UploadPanel
               file={file}
               language={language}
+              aspectRatio={aspectRatio}
+              reframeMode={reframeMode}
+              normalStrategy={normalStrategy}
               isUploading={isUploading}
-              isProcessing={isProcessing}
+              isBusy={isBusy}
               onFileChange={setFile}
               onLanguageChange={setLanguage}
+              onAspectRatioChange={setAspectRatio}
+              onReframeModeChange={setReframeMode}
+              onNormalStrategyChange={setNormalStrategy}
               onSubmit={handleSubmit}
             />
 
@@ -261,10 +383,21 @@ export default function Home() {
               />
             ) : null}
 
-            <StatusPanel job={job} error={error} />
+            <StatusPanel job={job} reframeJob={reframeJob} error={error} />
           </div>
 
-          <PreviewPanel job={job} originalVideoUrl={originalVideoUrl} />
+          <PreviewPanel
+            job={job}
+            originalVideoUrl={originalVideoUrl}
+            aspectRatio={aspectRatio}
+            reframeMode={reframeMode}
+            normalStrategy={normalStrategy}
+            isReframing={isReframing}
+            onAspectRatioChange={setAspectRatio}
+            onReframeModeChange={setReframeMode}
+            onNormalStrategyChange={setNormalStrategy}
+            onReframe={handleReframe}
+          />
         </section>
 
         <TranscriptPanel segments={job?.result?.transcript.segments || []} />
@@ -281,18 +414,30 @@ export default function Home() {
 function UploadPanel({
   file,
   language,
+  aspectRatio,
+  reframeMode,
+  normalStrategy,
   isUploading,
-  isProcessing,
+  isBusy,
   onFileChange,
   onLanguageChange,
+  onAspectRatioChange,
+  onReframeModeChange,
+  onNormalStrategyChange,
   onSubmit,
 }: {
   file: File | null;
   language: string;
+  aspectRatio: AspectRatio;
+  reframeMode: ReframeMode;
+  normalStrategy: NormalReframeStrategy;
   isUploading: boolean;
-  isProcessing: boolean;
+  isBusy: boolean;
   onFileChange: (file: File | null) => void;
   onLanguageChange: (language: string) => void;
+  onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+  onReframeModeChange: (mode: ReframeMode) => void;
+  onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -326,9 +471,20 @@ function UploadPanel({
         </select>
       </label>
 
+      <div className="mt-4">
+        <ReframeControls
+          aspectRatio={aspectRatio}
+          reframeMode={reframeMode}
+          normalStrategy={normalStrategy}
+          onAspectRatioChange={onAspectRatioChange}
+          onReframeModeChange={onReframeModeChange}
+          onNormalStrategyChange={onNormalStrategyChange}
+        />
+      </div>
+
       <button
         type="submit"
-        disabled={!file || isUploading || isProcessing}
+        disabled={!file || isUploading || isBusy}
         className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isUploading ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
@@ -339,6 +495,66 @@ function UploadPanel({
         <p className="mt-3 truncate text-xs text-zinc-500">Selected: {file.name}</p>
       ) : null}
     </form>
+  );
+}
+
+function ReframeControls({
+  aspectRatio,
+  reframeMode,
+  normalStrategy,
+  onAspectRatioChange,
+  onReframeModeChange,
+  onNormalStrategyChange,
+}: {
+  aspectRatio: AspectRatio;
+  reframeMode: ReframeMode;
+  normalStrategy: NormalReframeStrategy;
+  onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+  onReframeModeChange: (mode: ReframeMode) => void;
+  onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-zinc-700">Aspect ratio</span>
+        <select
+          value={aspectRatio}
+          onChange={(event) => onAspectRatioChange(event.target.value as AspectRatio)}
+          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+        >
+          <option value="9:16">9:16 Shorts</option>
+          <option value="16:9">16:9 Wide</option>
+          <option value="1:1">1:1 Square</option>
+          <option value="4:5">4:5 Feed</option>
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-zinc-700">Mode</span>
+        <select
+          value={reframeMode}
+          onChange={(event) => onReframeModeChange(event.target.value as ReframeMode)}
+          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+        >
+          <option value="normal">Normal FFmpeg</option>
+          <option value="smart">AI face center</option>
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-zinc-700">Normal style</span>
+        <select
+          value={normalStrategy}
+          onChange={(event) => onNormalStrategyChange(event.target.value as NormalReframeStrategy)}
+          disabled={reframeMode === "smart"}
+          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
+        >
+          <option value="crop">Crop</option>
+          <option value="blur-background">Blur background</option>
+          <option value="pad">Pad</option>
+        </select>
+      </label>
+    </div>
   );
 }
 
@@ -402,7 +618,17 @@ function StoredVideosPanel({
   );
 }
 
-function StatusPanel({ job, error }: { job: JobState | null; error: string | null }) {
+function StatusPanel({
+  job,
+  reframeJob,
+  error,
+}: {
+  job: JobState | null;
+  reframeJob: ReframeJobState | null;
+  error: string | null;
+}) {
+  const active = reframeJob && reframeJob.status !== "complete" ? reframeJob : job;
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
@@ -413,20 +639,20 @@ function StatusPanel({ job, error }: { job: JobState | null; error: string | nul
       <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
         <div
           className="h-full rounded-full bg-emerald-600 transition-all"
-          style={{ width: `${job?.progress || 0}%` }}
+          style={{ width: `${active?.progress || 0}%` }}
         />
       </div>
 
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium capitalize text-zinc-800">
-            {job?.status?.replaceAll("_", " ") || "Idle"}
+            {active?.status?.replaceAll("_", " ") || "Idle"}
           </p>
           <p className="mt-1 text-sm text-zinc-600">
-            {error || job?.error || job?.message || "Waiting for upload."}
+            {error || active?.error || active?.message || "Waiting for upload."}
           </p>
         </div>
-        <span className="text-sm font-medium text-zinc-500">{job?.progress || 0}%</span>
+        <span className="text-sm font-medium text-zinc-500">{active?.progress || 0}%</span>
       </div>
     </section>
   );
@@ -435,10 +661,29 @@ function StatusPanel({ job, error }: { job: JobState | null; error: string | nul
 function PreviewPanel({
   job,
   originalVideoUrl,
+  aspectRatio,
+  reframeMode,
+  normalStrategy,
+  isReframing,
+  onAspectRatioChange,
+  onReframeModeChange,
+  onNormalStrategyChange,
+  onReframe,
 }: {
   job: JobState | null;
   originalVideoUrl?: string;
+  aspectRatio: AspectRatio;
+  reframeMode: ReframeMode;
+  normalStrategy: NormalReframeStrategy;
+  isReframing: boolean;
+  onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+  onReframeModeChange: (mode: ReframeMode) => void;
+  onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
+  onReframe: () => void;
 }) {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const firstClip = job?.result?.clips[0];
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -446,9 +691,20 @@ function PreviewPanel({
           <Film className="size-5 text-sky-700" />
           <h2 className="text-base font-semibold">Preview</h2>
         </div>
-        {job?.result?.transcript.durationMs ? (
-          <span className="text-xs text-zinc-500">{formatTime(job.result.transcript.durationMs)}</span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {job?.result?.transcript.durationMs ? (
+            <span className="text-xs text-zinc-500">{formatTime(job.result.transcript.durationMs)}</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen((value) => !value)}
+            disabled={!job?.result}
+            title="Update clip framing"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Settings2 className="size-4" />
+          </button>
+        </div>
       </div>
 
       {originalVideoUrl ? (
@@ -459,11 +715,37 @@ function PreviewPanel({
         </div>
       )}
 
+      {isSettingsOpen && job?.result ? (
+        <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles className="size-4 text-sky-700" />
+            <p className="text-sm font-semibold">Update rendered clips</p>
+          </div>
+          <ReframeControls
+            aspectRatio={aspectRatio}
+            reframeMode={reframeMode}
+            normalStrategy={normalStrategy}
+            onAspectRatioChange={onAspectRatioChange}
+            onReframeModeChange={onReframeModeChange}
+            onNormalStrategyChange={onNormalStrategyChange}
+          />
+          <button
+            type="button"
+            onClick={onReframe}
+            disabled={isReframing}
+            className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isReframing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Update clips
+          </button>
+        </div>
+      ) : null}
+
       {job?.result?.video ? (
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4">
           <MetaChip label="File" value={job.result.video.originalFilename || job.videoId} />
           <MetaChip
-            label="Size"
+            label="Source size"
             value={
               job.result.video.width && job.result.video.height
                 ? `${job.result.video.width}x${job.result.video.height}`
@@ -471,7 +753,14 @@ function PreviewPanel({
             }
           />
           <MetaChip label="Codec" value={job.result.video.codec || "Unknown"} />
-          <MetaChip label="Clips" value={String(job.result.clips.length)} />
+          <MetaChip
+            label="Clip render"
+            value={
+              firstClip?.outputWidth && firstClip.outputHeight
+                ? `${firstClip.outputWidth}x${firstClip.outputHeight}`
+                : "Original"
+            }
+          />
         </div>
       ) : null}
     </section>
@@ -600,9 +889,12 @@ function ClipCard({
             <MetaChip label="Start" value={formatTime(clip.startMs)} />
             <MetaChip label="End" value={formatTime(clip.endMs)} />
             <MetaChip label="Duration" value={formatTime(clip.durationMs)} />
-            <MetaChip label="Source" value="Random MVP" />
-            <MetaChip label="Transcript" value={`${segments.length} rows`} />
-            <MetaChip label="Format" value="MP4" />
+            <MetaChip label="Ratio" value={clip.aspectRatio || "Original"} />
+            <MetaChip label="Mode" value={formatMode(clip)} />
+            <MetaChip
+              label="Output"
+              value={clip.outputWidth && clip.outputHeight ? `${clip.outputWidth}x${clip.outputHeight}` : "MP4"}
+            />
           </div>
 
           <p className="rounded-md bg-zinc-50 p-3 text-sm leading-6 text-zinc-700">
@@ -657,6 +949,18 @@ function MetaChip({ label, value }: { label: string; value: string }) {
 
 function getClipSegments(clip: ClipResult, segments: TranscriptSegment[]) {
   return segments.filter((segment) => segment.endMs > clip.startMs && segment.startMs < clip.endMs);
+}
+
+function formatMode(clip: ClipResult) {
+  if (!clip.reframeMode) {
+    return "Original";
+  }
+
+  if (clip.reframeMode === "smart") {
+    return "AI face";
+  }
+
+  return clip.normalStrategy?.replace("-", " ") || "Normal";
 }
 
 function absoluteApiUrl(path?: string) {

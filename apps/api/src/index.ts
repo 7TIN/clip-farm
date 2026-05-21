@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 
 import {
   createVideoRecord,
+  findReframeJob,
   getClipById,
   listStoredVideos,
   readJob,
@@ -11,7 +12,9 @@ import {
   videoPaths,
 } from "./storage";
 import { startProcessing } from "./processor";
-import type { ClipJson, JobState, TranscriptJson } from "./types";
+import { resolveReframeSettings } from "./reframe-settings";
+import { startReframeJob } from "./reframe";
+import type { ClipJson, JobState, ReframeJobState, TranscriptJson } from "./types";
 
 const app = new Hono();
 
@@ -65,13 +68,18 @@ app.post("/videos/process", async (c) => {
   const form = await c.req.formData();
   const video = form.get("video");
   const language = String(form.get("language") || "en");
+  const reframeSettings = resolveReframeSettings({
+    aspectRatio: form.get("aspectRatio"),
+    reframeMode: form.get("reframeMode"),
+    normalStrategy: form.get("normalStrategy"),
+  });
 
   if (!(video instanceof File)) {
     return c.json({ error: "Upload a video file using the `video` form field." }, 400);
   }
 
   const record = await createVideoRecord(video);
-  const job = await startProcessing(record.videoId, { language });
+  const job = await startProcessing(record.videoId, { language, reframeSettings });
 
   return c.json(
     {
@@ -81,6 +89,39 @@ app.post("/videos/process", async (c) => {
     },
     202,
   );
+});
+
+app.post("/videos/:videoId/reframe", async (c) => {
+  const videoId = c.req.param("videoId");
+  const body = await c.req.json().catch(() => ({}));
+  const existingJob = await readStoredVideoJob(videoId);
+
+  if (!existingJob?.result) {
+    return c.json({ error: "Video must be processed before it can be reframed." }, 404);
+  }
+
+  const settings = resolveReframeSettings(body);
+  const job = await startReframeJob(videoId, settings);
+
+  return c.json(
+    {
+      videoId,
+      jobId: job.jobId,
+      statusUrl: `/reframes/${job.jobId}/status`,
+    },
+    202,
+  );
+});
+
+app.get("/reframes/:jobId/status", async (c) => {
+  const jobId = c.req.param("jobId");
+  const job = await findReframeJob(jobId);
+
+  if (!job) {
+    return c.json({ error: "Reframe job not found." }, 404);
+  }
+
+  return c.json(withReframePublicUrls(job));
 });
 
 app.get("/videos/:videoId/status", async (c) => {
@@ -179,6 +220,21 @@ function withClipUrl(videoId: string, clip: ClipJson) {
   return {
     ...clip,
     mediaUrl: clip.outputPath ? `/videos/${videoId}/clips/${clip.id}/file` : undefined,
+  };
+}
+
+function withReframePublicUrls(job: ReframeJobState) {
+  if (!job.result) {
+    return job;
+  }
+
+  return {
+    ...job,
+    result: {
+      ...job.result,
+      originalVideoUrl: `/videos/${job.videoId}/original`,
+      clips: job.result.clips.map((clip) => withClipUrl(job.videoId, clip)),
+    },
   };
 }
 

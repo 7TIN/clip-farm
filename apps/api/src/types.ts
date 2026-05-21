@@ -26,6 +26,59 @@ export type ProcessResult = {
   clips: ClipJson[];
 };
 
+export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
+
+export type ReframeMode = "normal" | "smart";
+
+export type NormalReframeStrategy = "crop" | "blur-background" | "pad";
+
+export type ReframeSettings = {
+  aspectRatio: AspectRatio;
+  mode: ReframeMode;
+  normalStrategy: NormalReframeStrategy;
+  targetWidth: number;
+  targetHeight: number;
+};
+
+export type ReframeJobStatus =
+  | "queued"
+  | "analyzing"
+  | "rendering"
+  | "complete"
+  | "failed";
+
+export type ReframeJobState = {
+  jobId: string;
+  videoId: string;
+  status: ReframeJobStatus;
+  progress: number;
+  message: string;
+  settings: ReframeSettings;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+  result?: ProcessResult;
+};
+
+export type SmartCropEntry = {
+  timeMs: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence?: number;
+};
+
+export type SmartCropMetadata = {
+  sourceWidth: number;
+  sourceHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+  cropWidth: number;
+  cropHeight: number;
+  entries: SmartCropEntry[];
+};
+
 export type VideoMetadata = {
   id: string;
   originalFilename: string;
@@ -76,6 +129,12 @@ export type ClipJson = {
   status: "suggested" | "rendered" | "failed";
   outputPath?: string;
   mediaUrl?: string;
+  aspectRatio?: AspectRatio;
+  reframeMode?: ReframeMode;
+  normalStrategy?: NormalReframeStrategy;
+  outputWidth?: number;
+  outputHeight?: number;
+  renderVersion?: string;
 };
 
 export type StoredVideoSummary = {

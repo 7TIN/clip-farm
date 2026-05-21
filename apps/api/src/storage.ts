@@ -4,6 +4,7 @@ import path from "node:path";
 import type {
   ClipJson,
   JobState,
+  ReframeJobState,
   StoredVideoSummary,
   TranscriptJson,
   VideoMetadata,
@@ -15,10 +16,14 @@ export const storageRoot = path.join(rootDir, "storage");
 export function videoPaths(videoId: string) {
   const baseDir = path.join(storageRoot, "videos", videoId);
   const clipsDir = path.join(baseDir, "clips");
+  const reframesDir = path.join(baseDir, "reframes");
+  const reframeJobsDir = path.join(baseDir, "reframe-jobs");
 
   return {
     baseDir,
     clipsDir,
+    reframesDir,
+    reframeJobsDir,
     originalVideo: path.join(baseDir, "original.mp4"),
     audio: path.join(baseDir, "audio.wav"),
     metadataJson: path.join(baseDir, "metadata.json"),
@@ -30,7 +35,11 @@ export function videoPaths(videoId: string) {
 
 export async function ensureVideoDirs(videoId: string) {
   const paths = videoPaths(videoId);
-  await mkdir(paths.clipsDir, { recursive: true });
+  await Promise.all([
+    mkdir(paths.clipsDir, { recursive: true }),
+    mkdir(paths.reframesDir, { recursive: true }),
+    mkdir(paths.reframeJobsDir, { recursive: true }),
+  ]);
   return paths;
 }
 
@@ -85,6 +94,34 @@ export async function readJob(videoId: string) {
 export async function saveJob(job: JobState) {
   const paths = await ensureVideoDirs(job.videoId);
   await writeJsonFile(paths.jobJson, job);
+}
+
+export async function readReframeJob(videoId: string, jobId: string) {
+  const paths = videoPaths(videoId);
+  return readJsonFile<ReframeJobState>(path.join(paths.reframeJobsDir, `${jobId}.json`));
+}
+
+export async function saveReframeJob(job: ReframeJobState) {
+  const paths = await ensureVideoDirs(job.videoId);
+  await writeJsonFile(path.join(paths.reframeJobsDir, `${job.jobId}.json`), job);
+}
+
+export async function findReframeJob(jobId: string) {
+  const videosRoot = path.join(storageRoot, "videos");
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const job = await readReframeJob(entry.name, jobId);
+    if (job) {
+      return job;
+    }
+  }
+
+  return undefined;
 }
 
 export async function getClipById(videoId: string, clipId: string) {
@@ -180,5 +217,6 @@ export async function readJsonFile<T>(filePath: string): Promise<T | undefined> 
 }
 
 export async function writeJsonFile(filePath: string, value: unknown) {
+  await mkdir(path.dirname(filePath), { recursive: true });
   await Bun.write(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }

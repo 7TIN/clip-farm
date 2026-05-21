@@ -1,5 +1,7 @@
 import { createRandomClips } from "./clips";
-import { extractAudio, readVideoDetails, renderClip } from "./ffmpeg";
+import { renderClipsForVideo } from "./clip-renderer";
+import { extractAudio, readVideoDetails } from "./ffmpeg";
+import { defaultReframeSettings } from "./reframe-settings";
 import {
   readJob,
   readVideoMetadata,
@@ -9,10 +11,18 @@ import {
   writeJsonFile,
 } from "./storage";
 import { transcribeAudio } from "./transcription";
-import type { ClipJson, JobState, JobStatus, TranscriptJson, VideoMetadata } from "./types";
+import type {
+  ClipJson,
+  JobState,
+  JobStatus,
+  ReframeSettings,
+  TranscriptJson,
+  VideoMetadata,
+} from "./types";
 
 type ProcessingOptions = {
   language: string;
+  reframeSettings?: ReframeSettings;
 };
 
 export async function startProcessing(videoId: string, options: ProcessingOptions) {
@@ -66,20 +76,17 @@ async function processVideo(job: JobState, options: ProcessingOptions) {
     await writeJsonFile(paths.clipsJson, suggestedClips);
 
     await updateJob(job.videoId, "rendering_clips", 78, "Rendering clips with FFmpeg.");
-    const renderedClips: ClipJson[] = [];
-
-    for (const [index, clip] of suggestedClips.entries()) {
-      const progress = 78 + Math.round(((index + 1) / suggestedClips.length) * 17);
-      await updateJob(job.videoId, "rendering_clips", progress, `Rendering ${clip.title}.`);
-
-      const outputPath = await renderClip(metadata.originalPath, clip, paths.clipsDir);
-      renderedClips.push({
-        ...clip,
-        outputPath,
-        status: "rendered",
-      });
-      await writeJsonFile(paths.clipsJson, renderedClips.concat(suggestedClips.slice(index + 1)));
-    }
+    const settings = options.reframeSettings || defaultReframeSettings;
+    const renderedClips: ClipJson[] = await renderClipsForVideo(
+      job.videoId,
+      metadata.originalPath,
+      suggestedClips,
+      settings,
+      async (index, total, clip) => {
+        const progress = 78 + Math.round(((index + 1) / total) * 17);
+        await updateJob(job.videoId, "rendering_clips", progress, `Rendering ${clip.title}.`);
+      },
+    );
 
     const finalMetadata = (await readVideoMetadata(job.videoId)) || updatedMetadata;
     await writeJsonFile(paths.clipsJson, renderedClips);
