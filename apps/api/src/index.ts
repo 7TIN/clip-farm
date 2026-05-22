@@ -15,7 +15,12 @@ import {
 import { startProcessing } from "./processor";
 import { resolveReframeSettings } from "./reframe-settings";
 import { startReframeJob } from "./reframe";
-import type { ClipJson, JobState, ReframeJobState, TranscriptJson } from "./types";
+import type {
+  ClipJson,
+  JobState,
+  ReframeJobState,
+  TranscriptJson,
+} from "./types";
 
 const app = new Hono();
 
@@ -76,11 +81,17 @@ app.post("/videos/process", async (c) => {
   });
 
   if (!(video instanceof File)) {
-    return c.json({ error: "Upload a video file using the `video` form field." }, 400);
+    return c.json(
+      { error: "Upload a video file using the `video` form field." },
+      400,
+    );
   }
 
   const record = await createVideoRecord(video);
-  const job = await startProcessing(record.videoId, { language, reframeSettings });
+  const job = await startProcessing(record.videoId, {
+    language,
+    reframeSettings,
+  });
 
   return c.json(
     {
@@ -98,7 +109,10 @@ app.post("/videos/:videoId/reframe", async (c) => {
   const existingJob = await readStoredVideoJob(videoId);
 
   if (!existingJob?.result) {
-    return c.json({ error: "Video must be processed before it can be reframed." }, 404);
+    return c.json(
+      { error: "Video must be processed before it can be reframed." },
+      404,
+    );
   }
 
   const settings = resolveReframeSettings(body);
@@ -162,7 +176,9 @@ app.get("/videos/:videoId/clips", async (c) => {
 
 app.get("/videos/:videoId/original", async (c) => {
   const videoId = c.req.param("videoId");
-  const metadata = await readJsonFile<{ originalPath: string }>(videoPaths(videoId).metadataJson);
+  const metadata = await readJsonFile<{ originalPath: string }>(
+    videoPaths(videoId).metadataJson,
+  );
 
   if (!metadata) {
     return c.json({ error: "Original video metadata not found." }, 404);
@@ -220,7 +236,9 @@ function withPublicUrls(job: JobState) {
 function withClipUrl(videoId: string, clip: ClipJson) {
   return {
     ...clip,
-    mediaUrl: clip.outputPath ? `/videos/${videoId}/clips/${clip.id}/file` : undefined,
+    mediaUrl: clip.outputPath
+      ? `/videos/${videoId}/clips/${clip.id}/file`
+      : undefined,
   };
 }
 
@@ -248,7 +266,6 @@ function isDevelopmentMode() {
   );
 }
 
-
 async function validatePythonEnvironment() {
   const pythonBin =
     process.env.PYTHON_BIN ||
@@ -258,7 +275,7 @@ async function validatePythonEnvironment() {
     [
       pythonBin,
       "-c",
-      "import cv2, mediapipe, numpy; print('Python CV OK')",
+      "import cv2, mediapipe.tasks, numpy; print('Python CV OK')",
     ],
     {
       stdout: "pipe",
@@ -273,9 +290,7 @@ async function validatePythonEnvironment() {
   ]);
 
   if (exitCode !== 0) {
-    throw new Error(
-      `Python CV environment invalid:\n${stderr || stdout}`,
-    );
+    throw new Error(`Python CV environment invalid:\n${stderr || stdout}`);
   }
 
   console.log(stdout.trim());

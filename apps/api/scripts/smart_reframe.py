@@ -1,7 +1,7 @@
 import argparse
 import json
-import math
 import sys
+import os
 
 
 def clamp(value, minimum, maximum):
@@ -14,13 +14,11 @@ def even(value):
 
 def moving_average(values, radius=3):
     smoothed = []
-
     for index in range(len(values)):
         start = max(0, index - radius)
         end = min(len(values), index + radius + 1)
         window = values[start:end]
         smoothed.append(sum(window) / len(window))
-
     return smoothed
 
 
@@ -44,16 +42,30 @@ def main():
     parser.add_argument("--target-width", type=int, required=True)
     parser.add_argument("--target-height", type=int, required=True)
     parser.add_argument("--sample-interval-ms", type=int, default=500)
+    parser.add_argument(
+        "--model-path",
+        default=os.path.join(os.path.dirname(__file__), "../models/blaze_face_short_range.tflite"),
+    )
     args = parser.parse_args()
 
     try:
         import cv2
-        import mediapipe as mp
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
     except ImportError as error:
         print(
             "Missing Python CV dependency. Install opencv-python and mediapipe, "
             "or use normal FFmpeg reframe mode. "
             f"Details: {error}",
+            file=sys.stderr,
+        )
+        return 1
+
+    model_path = os.path.abspath(args.model_path)
+    if not os.path.exists(model_path):
+        print(
+            f"Face detector model not found at: {model_path}\n"
+            "Run setup:python-first to download it.",
             file=sys.stderr,
         )
         return 1
@@ -69,10 +81,7 @@ def main():
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     sample_every = max(1, int(round(fps * args.sample_interval_ms / 1000)))
     crop_width, crop_height = crop_size(
-        source_width,
-        source_height,
-        args.target_width,
-        args.target_height,
+        source_width, source_height, args.target_width, args.target_height
     )
 
     max_x = max(0, source_width - crop_width)
@@ -81,8 +90,14 @@ def main():
     center_y = max_y / 2
     entries = []
 
-    mp_face_detection = mp.solutions.face_detection
-    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as detector:
+    # New Tasks API setup
+    base_options = mp_python.BaseOptions(model_asset_path=model_path)
+    options = mp_vision.FaceDetectorOptions(
+        base_options=base_options,
+        min_detection_confidence=0.5,
+    )
+
+    with mp_vision.FaceDetector.create_from_options(options) as detector:
         frame_index = 0
 
         while True:
@@ -94,25 +109,30 @@ def main():
                 frame_index += 1
                 continue
 
+            # New API uses mediapipe Image, not raw numpy
+            import mediapipe as mp
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = detector.process(rgb)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = detector.detect(mp_image)
+
             selected = None
             confidence = 0
 
             if result.detections:
+                # Pick the largest face by bounding box area
                 selected = max(
                     result.detections,
-                    key=lambda detection: (
-                        detection.location_data.relative_bounding_box.width
-                        * detection.location_data.relative_bounding_box.height
+                    key=lambda d: (
+                        d.bounding_box.width * d.bounding_box.height
                     ),
                 )
-                confidence = selected.score[0] if selected.score else 0
+                confidence = selected.categories[0].score if selected.categories else 0
 
             if selected:
-                box = selected.location_data.relative_bounding_box
-                face_center_x = (box.xmin + box.width / 2) * source_width
-                face_center_y = (box.ymin + box.height / 2) * source_height
+                box = selected.bounding_box
+                # New API gives absolute pixel coords, not relative
+                face_center_x = box.origin_x + box.width / 2
+                face_center_y = box.origin_y + box.height / 2
                 x = clamp(face_center_x - crop_width / 2, 0, max_x)
                 y = clamp(face_center_y - crop_height / 2, 0, max_y)
             else:
@@ -120,34 +140,30 @@ def main():
                 y = center_y
 
             time_ms = int(round((frame_index / fps) * 1000))
-            entries.append(
-                {
-                    "time_ms": time_ms,
-                    "x": x,
-                    "y": y,
-                    "width": crop_width,
-                    "height": crop_height,
-                    "confidence": confidence,
-                }
-            )
+            entries.append({
+                "time_ms": time_ms,
+                "x": x,
+                "y": y,
+                "width": crop_width,
+                "height": crop_height,
+                "confidence": confidence,
+            })
             frame_index += 1
 
     cap.release()
 
     if not entries:
-        entries.append(
-            {
-                "time_ms": 0,
-                "x": center_x,
-                "y": center_y,
-                "width": crop_width,
-                "height": crop_height,
-                "confidence": 0,
-            }
-        )
+        entries.append({
+            "time_ms": 0,
+            "x": center_x,
+            "y": center_y,
+            "width": crop_width,
+            "height": crop_height,
+            "confidence": 0,
+        })
 
-    smoothed_x = moving_average([entry["x"] for entry in entries])
-    smoothed_y = moving_average([entry["y"] for entry in entries])
+    smoothed_x = moving_average([e["x"] for e in entries])
+    smoothed_y = moving_average([e["y"] for e in entries])
 
     for index, entry in enumerate(entries):
         entry["x"] = int(round(clamp(smoothed_x[index], 0, max_x)))

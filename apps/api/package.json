@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "APP_ENV=dev bun --watch src/index.ts",
-    "setup:python-first": "uv venv && uv pip install -r requirements.txt",
+    "setup:python-first": "uv venv && uv pip install -r requirements.txt && mkdir -p models && curl -L https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite -o models/blaze_face_short_range.tflite",
     "setup:python": "uv pip install -r requirements.txt",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit"
