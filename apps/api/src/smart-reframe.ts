@@ -19,9 +19,17 @@ type PythonSmartCropResponse = {
   }>;
 };
 
-export async function analyzeSmartCrop(videoPath: string, settings: ReframeSettings) {
-  const pythonBin = process.env.PYTHON_BIN || "python";
-  const scriptPath = path.resolve(import.meta.dir, "../scripts/smart_reframe.py");
+export async function analyzeSmartCrop(
+  videoPath: string,
+  settings: ReframeSettings,
+) {
+  const pythonBin =
+  process.env.PYTHON_BIN ||
+  path.resolve(process.cwd(), ".venv/Scripts/python.exe");
+  const scriptPath = path.resolve(
+    import.meta.dir,
+    "../scripts/smart_reframe.py",
+  );
   let proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
 
   try {
@@ -41,10 +49,8 @@ export async function analyzeSmartCrop(videoPath: string, settings: ReframeSetti
         stderr: "pipe",
       },
     );
-  } catch {
-    throw new Error(
-      `Smart reframe could not start Python. Set PYTHON_BIN or use normal FFmpeg mode.`,
-    );
+  } catch (error) {
+    throw new Error(`Smart reframe could not start Python: ${String(error)}`);
   }
 
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -69,7 +75,9 @@ export async function analyzeSmartCrop(videoPath: string, settings: ReframeSetti
   return normalizeSmartCrop(parsed);
 }
 
-function normalizeSmartCrop(response: PythonSmartCropResponse): SmartCropMetadata {
+function normalizeSmartCrop(
+  response: PythonSmartCropResponse,
+): SmartCropMetadata {
   return {
     sourceWidth: response.source_width,
     sourceHeight: response.source_height,

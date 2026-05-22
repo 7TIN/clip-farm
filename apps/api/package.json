@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "APP_ENV=dev bun --watch src/index.ts",
+    "setup:python-first": "uv venv && uv pip install -r requirements.txt",
+    "setup:python": "uv pip install -r requirements.txt",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit"
   },

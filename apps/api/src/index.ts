@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import path from "path";
 
 import {
   createVideoRecord,
@@ -247,7 +248,42 @@ function isDevelopmentMode() {
   );
 }
 
+
+async function validatePythonEnvironment() {
+  const pythonBin =
+    process.env.PYTHON_BIN ||
+    path.resolve(process.cwd(), ".venv/Scripts/python.exe");
+
+  const proc = Bun.spawn(
+    [
+      pythonBin,
+      "-c",
+      "import cv2, mediapipe, numpy; print('Python CV OK')",
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  if (exitCode !== 0) {
+    throw new Error(
+      `Python CV environment invalid:\n${stderr || stdout}`,
+    );
+  }
+
+  console.log(stdout.trim());
+}
+
 const port = Number(process.env.PORT || 3001);
+
+await validatePythonEnvironment();
 
 Bun.serve({
   port,
