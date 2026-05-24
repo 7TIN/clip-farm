@@ -3,6 +3,7 @@ import type {
   NormalReframeStrategy,
   ReframeMode,
   ReframeSettings,
+  SmartReframeLayout,
 } from "./types";
 
 const dimensionsByRatio: Record<AspectRatio, { width: number; height: number }> = {
@@ -15,6 +16,7 @@ const dimensionsByRatio: Record<AspectRatio, { width: number; height: number }> 
 const aspectRatios = Object.keys(dimensionsByRatio) as AspectRatio[];
 const modes: ReframeMode[] = ["normal", "smart"];
 const normalStrategies: NormalReframeStrategy[] = ["crop", "blur-background", "pad"];
+const smartLayouts: SmartReframeLayout[] = ["single", "split"];
 
 export const defaultReframeSettings = resolveReframeSettings({});
 
@@ -26,12 +28,14 @@ export function resolveReframeSettings(input: Record<string, unknown>): ReframeS
     normalStrategies,
     "crop",
   );
+  const smartLayout = coerceChoice(input.smartLayout, smartLayouts, "single");
   const dimensions = dimensionsByRatio[aspectRatio];
 
   return {
     aspectRatio,
     mode,
     normalStrategy,
+    smartLayout,
     targetWidth: dimensions.width,
     targetHeight: dimensions.height,
   };
@@ -39,7 +43,11 @@ export function resolveReframeSettings(input: Record<string, unknown>): ReframeS
 
 export function settingsSlug(settings: ReframeSettings) {
   const ratio = settings.aspectRatio.replace(":", "x");
-  const mode = settings.mode === "normal" ? `normal-${settings.normalStrategy}` : "smart-face";
+  const smartLayout = settings.smartLayout || "single";
+  const mode =
+    settings.mode === "normal"
+      ? `normal-${settings.normalStrategy}`
+      : `smart-${smartLayout}`;
   return `${ratio}-${mode}`;
 }
 

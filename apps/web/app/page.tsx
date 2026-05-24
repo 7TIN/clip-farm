@@ -12,7 +12,9 @@ import {
   Scissors,
   Settings2,
   Sparkles,
+  Trash2,
   UploadCloud,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,16 @@ type ReframeJobStatus =
 type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
 type ReframeMode = "normal" | "smart";
 type NormalReframeStrategy = "crop" | "blur-background" | "pad";
+type SmartReframeLayout = "single" | "split";
+
+type ReframeSettings = {
+  aspectRatio: AspectRatio;
+  mode: ReframeMode;
+  normalStrategy: NormalReframeStrategy;
+  smartLayout: SmartReframeLayout;
+  targetWidth: number;
+  targetHeight: number;
+};
 
 type TranscriptSegment = {
   id: string;
@@ -57,6 +69,7 @@ type ClipResult = {
   aspectRatio?: AspectRatio;
   reframeMode?: ReframeMode;
   normalStrategy?: NormalReframeStrategy;
+  smartLayout?: SmartReframeLayout;
   outputWidth?: number;
   outputHeight?: number;
   renderVersion?: string;
@@ -111,6 +124,19 @@ type StoredVideoSummary = {
   updatedAt?: string;
 };
 
+type ReframeJobSummary = {
+  jobId: string;
+  videoId: string;
+  status: ReframeJobStatus;
+  progress: number;
+  message: string;
+  settings: ReframeSettings;
+  clipFileCount: number;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const SHOW_DEV_LIBRARY =
   process.env.NEXT_PUBLIC_APP_ENV === "dev" ||
@@ -124,12 +150,17 @@ export default function Home() {
   const [reframeMode, setReframeMode] = useState<ReframeMode>("normal");
   const [normalStrategy, setNormalStrategy] =
     useState<NormalReframeStrategy>("crop");
+  const [smartLayout, setSmartLayout] = useState<SmartReframeLayout>("single");
   const [videoId, setVideoId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
   const [reframeJob, setReframeJob] = useState<ReframeJobState | null>(null);
+  const [reframeJobs, setReframeJobs] = useState<ReframeJobSummary[]>([]);
   const [storedVideos, setStoredVideos] = useState<StoredVideoSummary[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingStoredVideos, setIsLoadingStoredVideos] = useState(false);
+  const [isLoadingReframeJobs, setIsLoadingReframeJobs] = useState(false);
+  const [isCleaningReframes, setIsCleaningReframes] = useState(false);
+  const [isRepairingClips, setIsRepairingClips] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isProcessing = Boolean(
@@ -160,8 +191,6 @@ export default function Home() {
       return;
     }
 
-    console.log("normal video process");
-
     const pollStatus = async () => {
       try {
         const response = await fetch(
@@ -184,53 +213,10 @@ export default function Home() {
     };
 
     void pollStatus();
-    console.log("normal video process checks done");
     const intervalId = window.setInterval(pollStatus, POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [videoId, job?.status]);
-
-  // useEffect(() => {
-  //   if (!reframeJob || reframeJob.status === "complete" || reframeJob.status === "failed") {
-  //     return;
-  //   }
-  //   console.log("reframe video process");
-
-  //   const pollReframe = async () => {
-  //     try {
-  //       const response = await fetch(`${API_BASE_URL}/reframes/${reframeJob.jobId}/status`);
-  //       const payload = await response.json();
-
-  //       if (!response.ok) {
-  //         throw new Error(payload.error || "Could not load reframe status.");
-  //       }
-
-  //       setReframeJob(payload);
-
-  //       if (payload.status === "complete" && payload.result) {
-  //         setJob({
-  //           jobId: `cached_${payload.videoId}`,
-  //           videoId: payload.videoId,
-  //           status: "complete",
-  //           progress: 100,
-  //           message: "Processing complete.",
-  //           result: payload.result,
-  //         });
-  //         if (SHOW_DEV_LIBRARY) {
-  //           void loadStoredVideos();
-  //         }
-  //       }
-  //     } catch (pollError) {
-  //       setError(pollError instanceof Error ? pollError.message : "Reframe polling failed.");
-  //     }
-  //   };
-
-  //   void pollReframe();
-  //   const intervalId = window.setInterval(pollReframe, POLL_INTERVAL_MS);
-  //  console.log("reframe video process checks done");
-
-  //   return () => window.clearInterval(intervalId);
-  // }, [reframeJob]);
 
   useEffect(() => {
     if (!reframeJob?.jobId) {
@@ -242,8 +228,6 @@ export default function Home() {
     const pollReframe = async () => {
       while (!cancelled) {
         try {
-          console.log("reframe polling");
-
           const response = await fetch(
             `${API_BASE_URL}/reframes/${reframeJob.jobId}/status`,
           );
@@ -275,6 +259,11 @@ export default function Home() {
                 message: "Processing complete.",
                 result: payload.result,
               });
+            }
+
+            if (SHOW_DEV_LIBRARY) {
+              void loadStoredVideos();
+              void loadReframeJobs(payload.videoId);
             }
 
             break;
@@ -329,6 +318,35 @@ export default function Home() {
     }
   }
 
+  async function loadReframeJobs(selectedVideoId: string) {
+    if (!SHOW_DEV_LIBRARY) {
+      return;
+    }
+
+    setIsLoadingReframeJobs(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/dev/videos/${selectedVideoId}/reframes`,
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not load reframe jobs.");
+      }
+
+      setReframeJobs(payload.jobs || []);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Reframe jobs failed to load.",
+      );
+    } finally {
+      setIsLoadingReframeJobs(false);
+    }
+  }
+
   async function loadStoredVideo(selectedVideoId: string) {
     setError(null);
     setIsLoadingStoredVideos(true);
@@ -347,6 +365,7 @@ export default function Home() {
       setFile(null);
       setVideoId(payload.videoId);
       setJob(payload);
+      void loadReframeJobs(payload.videoId);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -378,6 +397,7 @@ export default function Home() {
       body.append("aspectRatio", aspectRatio);
       body.append("reframeMode", reframeMode);
       body.append("normalStrategy", normalStrategy);
+      body.append("smartLayout", smartLayout);
 
       const response = await fetch(`${API_BASE_URL}/videos/process`, {
         method: "POST",
@@ -430,6 +450,7 @@ export default function Home() {
             aspectRatio,
             reframeMode,
             normalStrategy,
+            smartLayout,
           }),
         },
       );
@@ -452,6 +473,96 @@ export default function Home() {
           ? reframeError.message
           : "Reframe failed to start.",
       );
+    }
+  }
+
+  async function handleDeleteReframe(settings?: ReframeSettings) {
+    if (!job?.videoId) {
+      setError("Open a processed video before deleting reframe variants.");
+      return;
+    }
+
+    setIsCleaningReframes(true);
+    setError(null);
+
+    try {
+      const selectedSettings = settings || {
+        aspectRatio,
+        mode: reframeMode,
+        normalStrategy,
+        smartLayout,
+        targetWidth: 0,
+        targetHeight: 0,
+      };
+      const response = await fetch(
+        `${API_BASE_URL}/dev/videos/${job.videoId}/reframes`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            aspectRatio: selectedSettings.aspectRatio,
+            reframeMode: selectedSettings.mode,
+            normalStrategy: selectedSettings.normalStrategy,
+            smartLayout: selectedSettings.smartLayout,
+          }),
+        },
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not delete reframe variant.");
+      }
+
+      setJob(payload.job);
+      await loadReframeJobs(job.videoId);
+      if (SHOW_DEV_LIBRARY) {
+        void loadStoredVideos();
+      }
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Reframe cleanup failed.",
+      );
+    } finally {
+      setIsCleaningReframes(false);
+    }
+  }
+
+  async function handleRepairClips() {
+    if (!job?.videoId) {
+      setError("Open a processed video before repairing clip files.");
+      return;
+    }
+
+    setIsRepairingClips(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/dev/videos/${job.videoId}/repair-clips`,
+        {
+          method: "POST",
+        },
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not repair clip files.");
+      }
+
+      setJob(payload.job);
+      await loadReframeJobs(job.videoId);
+    } catch (repairError) {
+      setError(
+        repairError instanceof Error
+          ? repairError.message
+          : "Clip repair failed.",
+      );
+    } finally {
+      setIsRepairingClips(false);
     }
   }
 
@@ -485,6 +596,7 @@ export default function Home() {
               aspectRatio={aspectRatio}
               reframeMode={reframeMode}
               normalStrategy={normalStrategy}
+              smartLayout={smartLayout}
               isUploading={isUploading}
               isBusy={isBusy}
               onFileChange={setFile}
@@ -492,6 +604,7 @@ export default function Home() {
               onAspectRatioChange={setAspectRatio}
               onReframeModeChange={setReframeMode}
               onNormalStrategyChange={setNormalStrategy}
+              onSmartLayoutChange={setSmartLayout}
               onSubmit={handleSubmit}
             />
             <PreviewPanel
@@ -500,11 +613,22 @@ export default function Home() {
               aspectRatio={aspectRatio}
               reframeMode={reframeMode}
               normalStrategy={normalStrategy}
+              smartLayout={smartLayout}
+              reframeJobs={reframeJobs}
+              isLoadingReframeJobs={isLoadingReframeJobs}
               isReframing={isReframing}
+              isCleaningReframes={isCleaningReframes}
+              isRepairingClips={isRepairingClips}
               onAspectRatioChange={setAspectRatio}
               onReframeModeChange={setReframeMode}
               onNormalStrategyChange={setNormalStrategy}
+              onSmartLayoutChange={setSmartLayout}
               onReframe={handleReframe}
+              onRefreshReframeJobs={() =>
+                job?.videoId && void loadReframeJobs(job.videoId)
+              }
+              onDeleteReframe={(settings) => void handleDeleteReframe(settings)}
+              onRepairClips={() => void handleRepairClips()}
             />
           </div>
           <div className="flex flex-col gap-4">
@@ -541,6 +665,7 @@ function UploadPanel({
   aspectRatio,
   reframeMode,
   normalStrategy,
+  smartLayout,
   isUploading,
   isBusy,
   onFileChange,
@@ -548,6 +673,7 @@ function UploadPanel({
   onAspectRatioChange,
   onReframeModeChange,
   onNormalStrategyChange,
+  onSmartLayoutChange,
   onSubmit,
 }: {
   file: File | null;
@@ -555,6 +681,7 @@ function UploadPanel({
   aspectRatio: AspectRatio;
   reframeMode: ReframeMode;
   normalStrategy: NormalReframeStrategy;
+  smartLayout: SmartReframeLayout;
   isUploading: boolean;
   isBusy: boolean;
   onFileChange: (file: File | null) => void;
@@ -562,6 +689,7 @@ function UploadPanel({
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onReframeModeChange: (mode: ReframeMode) => void;
   onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
+  onSmartLayoutChange: (layout: SmartReframeLayout) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -607,9 +735,11 @@ function UploadPanel({
           aspectRatio={aspectRatio}
           reframeMode={reframeMode}
           normalStrategy={normalStrategy}
+          smartLayout={smartLayout}
           onAspectRatioChange={onAspectRatioChange}
           onReframeModeChange={onReframeModeChange}
           onNormalStrategyChange={onNormalStrategyChange}
+          onSmartLayoutChange={onSmartLayoutChange}
         />
       </div>
 
@@ -639,19 +769,23 @@ function ReframeControls({
   aspectRatio,
   reframeMode,
   normalStrategy,
+  smartLayout,
   onAspectRatioChange,
   onReframeModeChange,
   onNormalStrategyChange,
+  onSmartLayoutChange,
 }: {
   aspectRatio: AspectRatio;
   reframeMode: ReframeMode;
   normalStrategy: NormalReframeStrategy;
+  smartLayout: SmartReframeLayout;
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onReframeModeChange: (mode: ReframeMode) => void;
   onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
+  onSmartLayoutChange: (layout: SmartReframeLayout) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-zinc-700">
           Aspect ratio
@@ -683,6 +817,23 @@ function ReframeControls({
         >
           <option value="normal">Normal FFmpeg</option>
           <option value="smart">AI face center</option>
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-zinc-700">
+          Smart layout
+        </span>
+        <select
+          value={smartLayout}
+          onChange={(event) =>
+            onSmartLayoutChange(event.target.value as SmartReframeLayout)
+          }
+          disabled={reframeMode !== "smart"}
+          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
+        >
+          <option value="single">One speaker</option>
+          <option value="split">Split both</option>
         </select>
       </label>
 
@@ -826,22 +977,40 @@ function PreviewPanel({
   aspectRatio,
   reframeMode,
   normalStrategy,
+  smartLayout,
+  reframeJobs,
+  isLoadingReframeJobs,
   isReframing,
+  isCleaningReframes,
+  isRepairingClips,
   onAspectRatioChange,
   onReframeModeChange,
   onNormalStrategyChange,
+  onSmartLayoutChange,
   onReframe,
+  onRefreshReframeJobs,
+  onDeleteReframe,
+  onRepairClips,
 }: {
   job: JobState | null;
   originalVideoUrl?: string;
   aspectRatio: AspectRatio;
   reframeMode: ReframeMode;
   normalStrategy: NormalReframeStrategy;
+  smartLayout: SmartReframeLayout;
+  reframeJobs: ReframeJobSummary[];
+  isLoadingReframeJobs: boolean;
   isReframing: boolean;
+  isCleaningReframes: boolean;
+  isRepairingClips: boolean;
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onReframeModeChange: (mode: ReframeMode) => void;
   onNormalStrategyChange: (strategy: NormalReframeStrategy) => void;
+  onSmartLayoutChange: (layout: SmartReframeLayout) => void;
   onReframe: () => void;
+  onRefreshReframeJobs: () => void;
+  onDeleteReframe: (settings?: ReframeSettings) => void;
+  onRepairClips: () => void;
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const firstClip = job?.result?.clips[0];
@@ -893,23 +1062,60 @@ function PreviewPanel({
             aspectRatio={aspectRatio}
             reframeMode={reframeMode}
             normalStrategy={normalStrategy}
+            smartLayout={smartLayout}
             onAspectRatioChange={onAspectRatioChange}
             onReframeModeChange={onReframeModeChange}
             onNormalStrategyChange={onNormalStrategyChange}
+            onSmartLayoutChange={onSmartLayoutChange}
           />
-          <button
-            type="button"
-            onClick={onReframe}
-            disabled={isReframing}
-            className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isReframing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="size-4" />
-            )}
-            Update clips
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onReframe}
+              disabled={isReframing}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isReframing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Update clips
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteReframe()}
+              disabled={isCleaningReframes}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCleaningReframes ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              Delete selected
+            </button>
+            <button
+              type="button"
+              onClick={onRepairClips}
+              disabled={isRepairingClips}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRepairingClips ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Wrench className="size-4" />
+              )}
+              Repair files
+            </button>
+          </div>
+          <ReframeJobsList
+            jobs={reframeJobs}
+            isLoading={isLoadingReframeJobs}
+            isDeleting={isCleaningReframes}
+            onRefresh={onRefreshReframeJobs}
+            onDelete={onDeleteReframe}
+          />
         </div>
       ) : null}
 
@@ -939,6 +1145,78 @@ function PreviewPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ReframeJobsList({
+  jobs,
+  isLoading,
+  isDeleting,
+  onRefresh,
+  onDelete,
+}: {
+  jobs: ReframeJobSummary[];
+  isLoading: boolean;
+  isDeleting: boolean;
+  onRefresh: () => void;
+  onDelete: (settings: ReframeSettings) => void;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-zinc-200 bg-white p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">Reframe jobs</p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 disabled:opacity-50"
+        >
+          {isLoading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+          Refresh
+        </button>
+      </div>
+
+      <div className="max-h-48 space-y-2 overflow-auto pr-1">
+        {jobs.length === 0 ? (
+          <p className="rounded-md border border-dashed border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-500">
+            No saved reframe jobs for this video.
+          </p>
+        ) : null}
+
+        {jobs.map((job) => (
+          <div
+            key={job.jobId}
+            className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-zinc-900">
+                {formatSettings(job.settings)}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {job.status} - {job.clipFileCount} files
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onDelete(job.settings)}
+              disabled={isDeleting}
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+              title="Delete this reframe variant"
+            >
+              {isDeleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1173,10 +1451,18 @@ function formatMode(clip: ClipResult) {
   }
 
   if (clip.reframeMode === "smart") {
-    return "AI face";
+    return clip.smartLayout === "split" ? "AI split" : "AI face";
   }
 
   return clip.normalStrategy?.replace("-", " ") || "Normal";
+}
+
+function formatSettings(settings: ReframeSettings) {
+  if (settings.mode === "smart") {
+    return `${settings.aspectRatio} smart ${settings.smartLayout}`;
+  }
+
+  return `${settings.aspectRatio} ${settings.normalStrategy.replace("-", " ")}`;
 }
 
 function absoluteApiUrl(path?: string) {

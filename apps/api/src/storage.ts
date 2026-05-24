@@ -124,10 +124,16 @@ export async function findReframeJob(jobId: string) {
   return undefined;
 }
 
-export async function getClipById(videoId: string, clipId: string) {
+export async function getClipById(videoId: string, clipId: string, renderVersion?: string) {
   const paths = videoPaths(videoId);
   const clips = await readJsonFile<ClipJson[]>(paths.clipsJson);
-  return clips?.find((clip) => clip.id === clipId);
+
+  if (renderVersion) {
+    return clips?.find((clip) => clip.id === clipId && clip.renderVersion === renderVersion);
+  }
+
+  return clips?.find((clip) => clip.id === clipId && !clip.renderVersion)
+    || clips?.find((clip) => clip.id === clipId);
 }
 
 export async function listStoredVideos(): Promise<StoredVideoSummary[]> {

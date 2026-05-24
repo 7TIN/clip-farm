@@ -3,12 +3,22 @@ import path from "node:path";
 import type { ReframeSettings, SmartCropMetadata } from "./types";
 
 type PythonSmartCropResponse = {
+  layout?: "single" | "split";
   source_width: number;
   source_height: number;
   target_width: number;
   target_height: number;
   crop_width: number;
   crop_height: number;
+  split_orientation?: "vertical" | "horizontal";
+  panels?: Array<{
+    label?: "primary" | "secondary";
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence?: number;
+  }>;
   entries: Array<{
     time_ms: number;
     x: number;
@@ -43,6 +53,8 @@ export async function analyzeSmartCrop(
         String(settings.targetWidth),
         "--target-height",
         String(settings.targetHeight),
+        "--layout",
+        settings.smartLayout,
       ],
       {
         stdout: "pipe",
@@ -79,6 +91,7 @@ function normalizeSmartCrop(
   response: PythonSmartCropResponse,
 ): SmartCropMetadata {
   return {
+    layout: response.layout || "single",
     sourceWidth: response.source_width,
     sourceHeight: response.source_height,
     targetWidth: response.target_width,
@@ -92,6 +105,15 @@ function normalizeSmartCrop(
       width: entry.width,
       height: entry.height,
       confidence: entry.confidence,
+    })),
+    splitOrientation: response.split_orientation,
+    panels: response.panels?.map((panel, index) => ({
+      label: panel.label || (index === 0 ? "primary" : "secondary"),
+      x: panel.x,
+      y: panel.y,
+      width: panel.width,
+      height: panel.height,
+      confidence: panel.confidence,
     })),
   };
 }

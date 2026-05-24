@@ -13,6 +13,7 @@ coverage
 # logs
 logs
 _.log
+.codex-*.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
@@ -26,6 +27,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+__pycache__/
 
 # local MVP media storage
 storage

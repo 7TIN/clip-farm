@@ -70,10 +70,11 @@ async function processReframeJob(job: ReframeJobState) {
         : "Preparing FFmpeg reframe filters.";
     await updateReframeJob(job.videoId, job.jobId, "analyzing", 25, analyzingMessage);
 
+    const sourceClips = sourceClipsForReframe(clips);
     const renderedClips = await renderClipsForVideo(
       job.videoId,
       metadata.originalPath,
-      clips,
+      sourceClips,
       job.settings,
       async (index, total, clip) => {
         const progress = 35 + Math.round(((index + 1) / total) * 55);
@@ -95,6 +96,38 @@ async function processReframeJob(job: ReframeJobState) {
   } catch (error) {
     await failReframeJob(job.videoId, job.jobId, error);
   }
+}
+
+function sourceClipsForReframe(clips: ClipJson[]) {
+  const byId = new Map<string, ClipJson>();
+
+  for (const clip of clips) {
+    const existing = byId.get(clip.id);
+    const isBaseClip = !clip.renderVersion && !clip.aspectRatio && !clip.reframeMode;
+
+    if (!existing || isBaseClip) {
+      byId.set(clip.id, stripReframeFields(clip));
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => a.startMs - b.startMs);
+}
+
+function stripReframeFields(clip: ClipJson): ClipJson {
+  const {
+    aspectRatio,
+    reframeMode,
+    normalStrategy,
+    smartLayout,
+    outputWidth,
+    outputHeight,
+    renderVersion,
+    mediaUrl,
+    outputPath,
+    ...baseClip
+  } = clip;
+
+  return baseClip;
 }
 
 async function buildUpdatedMainJob(

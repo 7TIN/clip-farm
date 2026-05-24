@@ -31,6 +31,7 @@ export async function renderClipsForVideo(
       aspectRatio: settings.aspectRatio,
       reframeMode: settings.mode,
       normalStrategy: settings.normalStrategy,
+      smartLayout: settings.smartLayout,
       outputWidth: settings.targetWidth,
       outputHeight: settings.targetHeight,
       renderVersion: settingsSlug(settings),

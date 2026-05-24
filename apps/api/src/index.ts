@@ -13,6 +13,11 @@ import {
   videoPaths,
 } from "./storage";
 import { startProcessing } from "./processor";
+import {
+  deleteReframeVariant,
+  listReframeJobs,
+  repairMissingClipFiles,
+} from "./reframe-maintenance";
 import { resolveReframeSettings } from "./reframe-settings";
 import { startReframeJob } from "./reframe";
 import type {
@@ -29,7 +34,7 @@ app.use(
   cors({
     origin: "*",
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -70,6 +75,46 @@ app.get("/dev/videos/:videoId", async (c) => {
   return c.json(withPublicUrls(job));
 });
 
+app.get("/dev/videos/:videoId/reframes", async (c) => {
+  if (!isDevelopmentMode()) {
+    return c.json({ error: "Development reframe library is disabled." }, 404);
+  }
+
+  const videoId = c.req.param("videoId");
+  const jobs = await listReframeJobs(videoId);
+  return c.json({ jobs });
+});
+
+app.delete("/dev/videos/:videoId/reframes", async (c) => {
+  if (!isDevelopmentMode()) {
+    return c.json({ error: "Development reframe cleanup is disabled." }, 404);
+  }
+
+  const videoId = c.req.param("videoId");
+  const body = await c.req.json().catch(() => ({}));
+  const settings = resolveReframeSettings(body);
+  const result = await deleteReframeVariant(videoId, settings);
+
+  return c.json({
+    ...result,
+    job: withPublicUrls(result.job),
+  });
+});
+
+app.post("/dev/videos/:videoId/repair-clips", async (c) => {
+  if (!isDevelopmentMode()) {
+    return c.json({ error: "Development clip repair is disabled." }, 404);
+  }
+
+  const videoId = c.req.param("videoId");
+  const result = await repairMissingClipFiles(videoId);
+
+  return c.json({
+    ...result,
+    job: withPublicUrls(result.job),
+  });
+});
+
 app.post("/videos/process", async (c) => {
   const form = await c.req.formData();
   const video = form.get("video");
@@ -78,6 +123,7 @@ app.post("/videos/process", async (c) => {
     aspectRatio: form.get("aspectRatio"),
     reframeMode: form.get("reframeMode"),
     normalStrategy: form.get("normalStrategy"),
+    smartLayout: form.get("smartLayout"),
   });
 
   if (!(video instanceof File)) {
@@ -200,7 +246,8 @@ app.get("/videos/:videoId/original", async (c) => {
 app.get("/videos/:videoId/clips/:clipId/file", async (c) => {
   const videoId = c.req.param("videoId");
   const clipId = c.req.param("clipId");
-  const clip = await getClipById(videoId, clipId);
+  const renderVersion = c.req.query("version");
+  const clip = await getClipById(videoId, clipId, renderVersion);
 
   if (!clip?.outputPath) {
     return c.json({ error: "Rendered clip not found." }, 404);
@@ -234,10 +281,14 @@ function withPublicUrls(job: JobState) {
 }
 
 function withClipUrl(videoId: string, clip: ClipJson) {
+  const versionQuery = clip.renderVersion
+    ? `?version=${encodeURIComponent(clip.renderVersion)}`
+    : "";
+
   return {
     ...clip,
     mediaUrl: clip.outputPath
-      ? `/videos/${videoId}/clips/${clip.id}/file`
+      ? `/videos/${videoId}/clips/${clip.id}/file${versionQuery}`
       : undefined,
   };
 }

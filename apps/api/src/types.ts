@@ -32,10 +32,13 @@ export type ReframeMode = "normal" | "smart";
 
 export type NormalReframeStrategy = "crop" | "blur-background" | "pad";
 
+export type SmartReframeLayout = "single" | "split";
+
 export type ReframeSettings = {
   aspectRatio: AspectRatio;
   mode: ReframeMode;
   normalStrategy: NormalReframeStrategy;
+  smartLayout: SmartReframeLayout;
   targetWidth: number;
   targetHeight: number;
 };
@@ -69,7 +72,17 @@ export type SmartCropEntry = {
   confidence?: number;
 };
 
+export type SmartSplitPanel = {
+  label: "primary" | "secondary";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence?: number;
+};
+
 export type SmartCropMetadata = {
+  layout: SmartReframeLayout;
   sourceWidth: number;
   sourceHeight: number;
   targetWidth: number;
@@ -77,6 +90,8 @@ export type SmartCropMetadata = {
   cropWidth: number;
   cropHeight: number;
   entries: SmartCropEntry[];
+  splitOrientation?: "vertical" | "horizontal";
+  panels?: SmartSplitPanel[];
 };
 
 export type VideoMetadata = {
@@ -132,9 +147,23 @@ export type ClipJson = {
   aspectRatio?: AspectRatio;
   reframeMode?: ReframeMode;
   normalStrategy?: NormalReframeStrategy;
+  smartLayout?: SmartReframeLayout;
   outputWidth?: number;
   outputHeight?: number;
   renderVersion?: string;
+};
+
+export type ReframeJobSummary = {
+  jobId: string;
+  videoId: string;
+  status: ReframeJobStatus;
+  progress: number;
+  message: string;
+  settings: ReframeSettings;
+  clipFileCount: number;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
 };
 
 export type StoredVideoSummary = {

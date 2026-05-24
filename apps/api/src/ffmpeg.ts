@@ -77,7 +77,11 @@ export async function renderClip(
   const videoFilter = settings ? buildReframeFilter(clip, settings, smartCrop) : undefined;
 
   if (videoFilter) {
-    args.push("-vf", videoFilter);
+    if (videoFilter.kind === "complex") {
+      args.push("-filter_complex", videoFilter.value, "-map", "[v]", "-map", "0:a?");
+    } else {
+      args.push("-vf", videoFilter.value);
+    }
   }
 
   args.push(
@@ -104,7 +108,7 @@ function getClipOutputPath(clipsDir: string, clip: ClipJson, settings?: ReframeS
 
   const ratioSlug = settings.aspectRatio.replace(":", "x");
   const modeSlug =
-    settings.mode === "normal" ? `normal-${settings.normalStrategy}` : "smart-face";
+    settings.mode === "normal" ? `normal-${settings.normalStrategy}` : `smart-${settings.smartLayout}`;
   return path.join(clipsDir, `${clip.id}_${ratioSlug}_${modeSlug}.mp4`);
 }
 
@@ -117,7 +121,11 @@ function buildReframeFilter(
     return buildSmartCropFilter(clip, settings, smartCrop);
   }
 
-  return buildNormalReframeFilter(settings);
+  if (settings.mode === "smart" && smartCrop?.layout === "split" && smartCrop.panels?.length) {
+    return buildSmartSplitFilter(settings, smartCrop);
+  }
+
+  return { kind: "vf" as const, value: buildNormalReframeFilter(settings) };
 }
 
 function buildNormalReframeFilter(settings: ReframeSettings) {
@@ -168,11 +176,62 @@ function buildSmartCropFilter(
     })),
   );
 
-  return [
-    `crop=${cropWidth}:${cropHeight}:${xExpression}:${yExpression}`,
-    `scale=${settings.targetWidth}:${settings.targetHeight}`,
-    "setsar=1",
-  ].join(",");
+  return {
+    kind: "vf" as const,
+    value: [
+      `crop=${cropWidth}:${cropHeight}:${xExpression}:${yExpression}`,
+      `scale=${settings.targetWidth}:${settings.targetHeight}`,
+      "setsar=1",
+    ].join(","),
+  };
+}
+
+function buildSmartSplitFilter(settings: ReframeSettings, metadata: SmartCropMetadata) {
+  const [primary, secondary] = metadata.panels || [];
+
+  if (!primary || !secondary) {
+    return { kind: "vf" as const, value: buildNormalReframeFilter(settings) };
+  }
+
+  if (metadata.splitOrientation === "horizontal") {
+    const panelHeight = even(settings.targetHeight / 2);
+    const first = cropScaleFilter("a", "top", primary, settings.targetWidth, panelHeight);
+    const second = cropScaleFilter("b", "bottom", secondary, settings.targetWidth, panelHeight);
+
+    return {
+      kind: "complex" as const,
+      value: [
+        "[0:v]split=2[a][b]",
+        first,
+        second,
+        `[top][bottom]vstack=inputs=2,drawbox=x=0:y=${panelHeight - 2}:w=${settings.targetWidth}:h=4:color=white@0.8:t=fill,setsar=1[v]`,
+      ].join(";"),
+    };
+  }
+
+  const panelWidth = even(settings.targetWidth / 2);
+  const first = cropScaleFilter("a", "left", primary, panelWidth, settings.targetHeight);
+  const second = cropScaleFilter("b", "right", secondary, panelWidth, settings.targetHeight);
+
+  return {
+    kind: "complex" as const,
+    value: [
+      "[0:v]split=2[a][b]",
+      first,
+      second,
+      `[left][right]hstack=inputs=2,drawbox=x=${panelWidth - 2}:y=0:w=4:h=${settings.targetHeight}:color=white@0.8:t=fill,setsar=1[v]`,
+    ].join(";"),
+  };
+}
+
+function cropScaleFilter(
+  inputLabel: string,
+  outputLabel: string,
+  panel: { x: number; y: number; width: number; height: number },
+  targetWidth: number,
+  targetHeight: number,
+) {
+  return `[${inputLabel}]crop=${even(panel.width)}:${even(panel.height)}:${Math.round(panel.x)}:${Math.round(panel.y)},scale=${targetWidth}:${targetHeight}[${outputLabel}]`;
 }
 
 function entriesForClip(clip: ClipJson, metadata: SmartCropMetadata) {
@@ -203,14 +262,23 @@ function entriesForClip(clip: ClipJson, metadata: SmartCropMetadata) {
 
 function buildStepExpression(entries: Array<{ timeSeconds: number; value: number }>) {
   const sorted = [...entries].sort((a, b) => a.timeSeconds - b.timeSeconds);
-  const fallback = sorted[sorted.length - 1]?.value ?? 0;
+  if (sorted.length === 0) {
+    return "0";
+  }
 
-  let expression = String(fallback);
+  if (sorted.length === 1) {
+    return String(sorted[0]!.value);
+  }
+
+  const last = sorted[sorted.length - 1]!;
+  let expression = String(last.value);
 
   for (let index = sorted.length - 2; index >= 0; index -= 1) {
     const entry = sorted[index]!;
     const next = sorted[index + 1]!;
-    expression = `if(lt(t\\,${next.timeSeconds.toFixed(3)})\\,${entry.value}\\,${expression})`;
+    const duration = Math.max(0.001, next.timeSeconds - entry.timeSeconds);
+    const interpolated = `${entry.value}+(${next.value - entry.value})*(t-${entry.timeSeconds.toFixed(3)})/${duration.toFixed(3)}`;
+    expression = `if(lt(t\\,${entry.timeSeconds.toFixed(3)})\\,${entry.value}\\,if(lt(t\\,${next.timeSeconds.toFixed(3)})\\,${interpolated}\\,${expression}))`;
   }
 
   return expression;
