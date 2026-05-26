@@ -132,6 +132,76 @@ export type TranscriptWord = {
   speakerLabel?: string;
 };
 
+export type CaptionStylePreset =
+  | "basic"
+  | "modern"
+  | "scribble"
+  | "funky"
+  | "ali"
+  | "classic"
+  | "heat"
+  | "icy"
+  | "ghost"
+  | "editorial"
+  | "tallboy"
+  | "elegant"
+  | "hormozi"
+  | "clean"
+  | "roundtable"
+  | "matrix"
+  | "bubbly"
+  | "miner";
+
+export type CaptionEffect = "none" | "magic" | "squiggle" | "scroll";
+
+export type CaptionPosition = "top" | "center" | "bottom";
+
+export type CaptionSettings = {
+  style: CaptionStylePreset;
+  effect: CaptionEffect;
+  position: CaptionPosition;
+  maxWordsPerPage: number;
+  maxPageDurationMs: number;
+};
+
+export type CaptionWord = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  timestampMs: number;
+  confidence: number;
+};
+
+export type CaptionJobStatus =
+  | "queued"
+  | "preparing"
+  | "rendering_frames"
+  | "encoding"
+  | "complete"
+  | "failed";
+
+export type CaptionJobState = {
+  jobId: string;
+  videoId: string;
+  clipId: string;
+  renderVersion?: string;
+  status: CaptionJobStatus;
+  progress: number;
+  message: string;
+  settings: CaptionSettings;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+  result?: {
+    outputPath: string;
+    mediaUrl?: string;
+    width: number;
+    height: number;
+    fps: number;
+    durationMs: number;
+  };
+};
+
 export type ClipJson = {
   id: string;
   videoId: string;
@@ -151,6 +221,12 @@ export type ClipJson = {
   outputWidth?: number;
   outputHeight?: number;
   renderVersion?: string;
+  captionedOutputPath?: string;
+  captionedMediaUrl?: string;
+  captionStyle?: CaptionStylePreset;
+  captionEffect?: CaptionEffect;
+  captionPosition?: CaptionPosition;
+  captionRenderVersion?: string;
 };
 
 export type ReframeJobSummary = {

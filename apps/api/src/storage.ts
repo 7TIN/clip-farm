@@ -2,6 +2,7 @@ import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import type {
+  CaptionJobState,
   ClipJson,
   JobState,
   ReframeJobState,
@@ -13,17 +14,23 @@ import type {
 const rootDir = path.resolve(import.meta.dir, "../../..");
 export const storageRoot = path.join(rootDir, "storage");
 
+export const tmpRoot = path.join(storageRoot, "tmp", "caption-renders");
+
 export function videoPaths(videoId: string) {
   const baseDir = path.join(storageRoot, "videos", videoId);
   const clipsDir = path.join(baseDir, "clips");
   const reframesDir = path.join(baseDir, "reframes");
   const reframeJobsDir = path.join(baseDir, "reframe-jobs");
+  const captionsDir = path.join(baseDir, "captions");
+  const captionJobsDir = path.join(baseDir, "caption-jobs");
 
   return {
     baseDir,
     clipsDir,
     reframesDir,
     reframeJobsDir,
+    captionsDir,
+    captionJobsDir,
     originalVideo: path.join(baseDir, "original.mp4"),
     audio: path.join(baseDir, "audio.wav"),
     metadataJson: path.join(baseDir, "metadata.json"),
@@ -39,6 +46,8 @@ export async function ensureVideoDirs(videoId: string) {
     mkdir(paths.clipsDir, { recursive: true }),
     mkdir(paths.reframesDir, { recursive: true }),
     mkdir(paths.reframeJobsDir, { recursive: true }),
+    mkdir(paths.captionsDir, { recursive: true }),
+    mkdir(paths.captionJobsDir, { recursive: true }),
   ]);
   return paths;
 }
@@ -104,6 +113,67 @@ export async function readReframeJob(videoId: string, jobId: string) {
 export async function saveReframeJob(job: ReframeJobState) {
   const paths = await ensureVideoDirs(job.videoId);
   await writeJsonFile(path.join(paths.reframeJobsDir, `${job.jobId}.json`), job);
+}
+
+export async function readCaptionJob(videoId: string, jobId: string) {
+  const paths = videoPaths(videoId);
+  return readJsonFile<CaptionJobState>(path.join(paths.captionJobsDir, `${jobId}.json`));
+}
+
+export async function saveCaptionJob(job: CaptionJobState) {
+  const paths = await ensureVideoDirs(job.videoId);
+  await writeJsonFile(path.join(paths.captionJobsDir, `${job.jobId}.json`), job);
+}
+
+export async function findCaptionJob(jobId: string) {
+  const videosRoot = path.join(storageRoot, "videos");
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const job = await readCaptionJob(entry.name, jobId);
+    if (job) {
+      return job;
+    }
+  }
+
+  return undefined;
+}
+
+export async function updateClipCaptionResult(
+  videoId: string,
+  clipId: string,
+  renderVersion: string | undefined,
+  captionResult: NonNullable<CaptionJobState["result"]>,
+) {
+  const paths = videoPaths(videoId);
+  const clips = (await readJsonFile<ClipJson[]>(paths.clipsJson)) || [];
+
+  const settingsSlug = captionResult.outputPath
+    ? path.basename(captionResult.outputPath, ".mp4").split("_").slice(-1)[0] || ""
+    : "";
+
+  const updatedClips = clips.map((clip) => {
+    if (clip.id !== clipId) {
+      return clip;
+    }
+
+    if (renderVersion && clip.renderVersion !== renderVersion) {
+      return clip;
+    }
+
+    return {
+      ...clip,
+      captionedOutputPath: captionResult.outputPath,
+      captionRenderVersion: settingsSlug,
+    };
+  });
+
+  await writeJsonFile(paths.clipsJson, updatedClips);
+  return updatedClips;
 }
 
 export async function findReframeJob(jobId: string) {
