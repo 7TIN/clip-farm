@@ -8,6 +8,7 @@ import {
   findReframeJob,
   getClipById,
   listStoredVideos,
+  readCaptionJob,
   readJob,
   readJsonFile,
   readStoredVideoJob,
@@ -23,6 +24,8 @@ import {
 import { resolveCaptionSettings } from "./caption-settings";
 import { resolveReframeSettings } from "./reframe-settings";
 import { startReframeJob } from "./reframe";
+import { resolveCaptionSettings } from "./caption-settings";
+import { startCaptionJob } from "./caption-jobs";
 import type {
   CaptionJobState,
   ClipJson,
@@ -234,6 +237,78 @@ app.get("/reframes/:jobId/status", async (c) => {
   return c.json(withReframePublicUrls(job));
 });
 
+app.post("/videos/:videoId/clips/:clipId/captions", async (c) => {
+  const videoId = c.req.param("videoId");
+  const clipId = c.req.param("clipId");
+  const body = await c.req.json().catch(() => ({}));
+
+  const settings = resolveCaptionSettings(body);
+  const renderVersion = body.renderVersion as string | undefined;
+
+  const existingJob = await readStoredVideoJob(videoId);
+
+  if (!existingJob?.result) {
+    return c.json(
+      { error: "Video must be processed before captions can be rendered." },
+      404,
+    );
+  }
+
+  const job = await startCaptionJob(videoId, clipId, renderVersion, settings);
+
+  return c.json(
+    {
+      videoId,
+      clipId,
+      jobId: job.jobId,
+      statusUrl: `/caption-jobs/${job.jobId}/status`,
+    },
+    202,
+  );
+});
+
+app.get("/caption-jobs/:jobId/status", async (c) => {
+  const jobId = c.req.param("jobId");
+  const job = await findCaptionJob(jobId);
+
+  if (!job) {
+    return c.json({ error: "Caption job not found." }, 404);
+  }
+
+  return c.json(withCaptionPublicUrls(job));
+});
+
+app.get("/videos/:videoId/clips/:clipId/captioned-file", async (c) => {
+  const videoId = c.req.param("videoId");
+  const clipId = c.req.param("clipId");
+  const captionVersion = c.req.query("captionVersion");
+  const renderVersion = c.req.query("version");
+
+  const clip = await getClipById(videoId, clipId, renderVersion);
+
+  if (!clip?.captionedOutputPath && !clip?.outputPath) {
+    return c.json({ error: "Captioned clip not found." }, 404);
+  }
+
+  const filePath = clip.captionedOutputPath || clip.outputPath;
+
+  if (!filePath) {
+    return c.json({ error: "Captioned clip file path is missing." }, 404);
+  }
+
+  const file = Bun.file(filePath);
+
+  if (!(await file.exists())) {
+    return c.json({ error: "Captioned clip file is missing." }, 404);
+  }
+
+  return new Response(file, {
+    headers: {
+      "Content-Type": "video/mp4",
+    },
+  });
+});
+
 app.get("/videos/:videoId/status", async (c) => {
   const videoId = c.req.param("videoId");
   const job = await readJob(videoId);
@@ -356,13 +431,24 @@ function withClipUrl(videoId: string, clip: ClipJson) {
     ? `?version=${encodeURIComponent(clip.renderVersion)}`
     : "";
 
+  const captionVersionQuery =
+    clip.captionRenderVersion && clip.renderVersion
+      ? `?version=${encodeURIComponent(clip.renderVersion)}&captionVersion=${encodeURIComponent(clip.captionRenderVersion)}`
+      : clip.captionRenderVersion
+        ? `?captionVersion=${encodeURIComponent(clip.captionRenderVersion)}`
+        : "";
+
   return {
     ...clip,
     mediaUrl: clip.outputPath
       ? `/videos/${videoId}/clips/${clip.id}/file${versionQuery}`
       : undefined,
     captionedMediaUrl: clip.captionedOutputPath
+<<<<<<< HEAD
       ? `/videos/${videoId}/clips/${clip.id}/captioned-file${versionQuery}`
+=======
+      ? `/videos/${videoId}/clips/${clip.id}/captioned-file${captionVersionQuery}`
+>>>>>>> origin/main
       : undefined,
   };
 }
