@@ -9,10 +9,20 @@ type FfprobeOutput = {
     width?: number;
     height?: number;
     r_frame_rate?: string;
+    avg_frame_rate?: string;
   }>;
   format?: {
     duration?: string;
   };
+};
+
+export type ClipMediaDetails = {
+  width: number;
+  height: number;
+  fps: number;
+  durationSeconds: number;
+  durationMs: number;
+  durationInFrames: number;
 };
 
 export async function readVideoDetails(videoPath: string): Promise<Partial<VideoMetadata>> {
@@ -35,6 +45,36 @@ export async function readVideoDetails(videoPath: string): Promise<Partial<Video
     width: videoStream?.width,
     height: videoStream?.height,
     codec: videoStream?.codec_name,
+  };
+}
+
+export async function readClipMediaDetails(videoPath: string): Promise<ClipMediaDetails> {
+  const result = await runBinary("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration:stream=codec_type,width,height,r_frame_rate,avg_frame_rate",
+    "-of",
+    "json",
+    videoPath,
+  ]);
+
+  const parsed = JSON.parse(result.stdout || "{}") as FfprobeOutput;
+  const videoStream = parsed.streams?.find((stream) => stream.codec_type === "video");
+  const durationSeconds = Number(parsed.format?.duration || 0);
+  const fps = parseFps(videoStream?.avg_frame_rate || videoStream?.r_frame_rate);
+
+  if (!videoStream?.width || !videoStream.height || !Number.isFinite(durationSeconds)) {
+    throw new Error("Could not read clip media details with ffprobe.");
+  }
+
+  return {
+    width: videoStream.width,
+    height: videoStream.height,
+    fps,
+    durationSeconds,
+    durationMs: Math.round(durationSeconds * 1000),
+    durationInFrames: Math.max(1, Math.ceil(durationSeconds * fps)),
   };
 }
 
@@ -292,101 +332,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-export type ClipMediaDetails = {
-  width: number;
-  height: number;
-  fps: number;
-  durationSeconds: number;
-  durationMs: number;
-  durationInFrames: number;
-};
-
-type FfprobeVideoStream = {
-  width?: number;
-  height?: number;
-  r_frame_rate?: string;
-  codec_name?: string;
-};
-
-type FfprobeFormat = {
-  duration?: string;
-};
-
-export async function readClipMediaDetails(clipPath: string): Promise<ClipMediaDetails> {
-  const result = await runBinary("ffprobe", [
-    "-v",
-    "error",
-    "-show_entries",
-    "stream=width,height,r_frame_rate:format=duration",
-    "-of",
-    "json",
-    clipPath,
-  ]);
-
-  const parsed = JSON.parse(result.stdout || "{}") as {
-    streams?: FfprobeVideoStream[];
-    format?: FfprobeFormat;
-  };
-
-  const videoStream = parsed.streams?.find((s) => s.width && s.height);
-  const width = videoStream?.width || 1920;
-  const height = videoStream?.height || 1080;
-  const fps = parseFps(videoStream?.r_frame_rate);
-  const durationSeconds = Number(parsed.format?.duration || 0);
-  const durationMs = Math.round(durationSeconds * 1000);
-  const durationInFrames = Math.ceil(durationSeconds * fps);
-
-  return { width, height, fps, durationSeconds, durationMs, durationInFrames };
-}
-
-function parseFps(rate: string | undefined) {
-  if (!rate) {
-    return 30;
-  }
-
-  const [num, den] = rate.split("/").map(Number);
-
-  if (!num || !den) {
-    return Number(rate) || 30;
-  }
-
-  return num / den;
-}
-
-export async function encodeCaptionFramesToMp4(
-  framesDir: string,
-  clipPath: string,
-  outputPath: string,
-  fps: number,
-) {
-  await runBinary("ffmpeg", [
-    "-y",
-    "-framerate",
-    String(fps),
-    "-i",
-    `${framesDir}/%07d.png`,
-    "-i",
-    clipPath,
-    "-map",
-    "0:v",
-    "-map",
-    "1:a?",
-    "-c:v",
-    "libx264",
-    "-crf",
-    "18",
-    "-preset",
-    "fast",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "copy",
-    "-movflags",
-    "+faststart",
-    outputPath,
-  ]);
-}
-
 export async function runBinary(command: string, args: string[]) {
   let proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
 
@@ -411,4 +356,18 @@ export async function runBinary(command: string, args: string[]) {
   }
 
   return { stdout, stderr };
+}
+
+function parseFps(rate?: string) {
+  if (!rate || rate === "0/0") {
+    return 30;
+  }
+
+  const [numerator, denominator] = rate.split("/").map(Number);
+  if (numerator && denominator) {
+    return numerator / denominator;
+  }
+
+  const parsed = Number(rate);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
 }

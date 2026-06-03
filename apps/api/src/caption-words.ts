@@ -1,58 +1,61 @@
-import type { CaptionWord, ClipJson, TranscriptJson } from "./types";
+import type { CaptionToken, ClipJson, TranscriptJson, TranscriptSegment } from "./types";
 
-export function wordsForClip(transcript: TranscriptJson, clip: ClipJson): CaptionWord[] {
-  const words = transcript.words?.length ? transcript.words : undefined;
+export function wordsForClip(transcript: TranscriptJson, clip: ClipJson): CaptionToken[] {
+  const wordTokens = transcript.words
+    .filter((word) => word.endMs > clip.startMs && word.startMs < clip.endMs)
+    .map((word, index) => {
+      const startMs = clamp(word.startMs - clip.startMs, 0, clip.durationMs);
+      const endMs = clamp(word.endMs - clip.startMs, startMs + 1, clip.durationMs);
 
-  if (words) {
-    return words
-      .filter((word) => word.endMs > clip.startMs && word.startMs < clip.endMs)
-      .map((word, index) => ({
+      return {
         text: index === 0 ? word.word : ` ${word.word}`,
-        startMs: Math.max(0, word.startMs - clip.startMs),
-        endMs: Math.max(0, word.endMs - clip.startMs),
-        timestampMs: Math.max(0, (word.startMs + word.endMs) / 2 - clip.startMs),
+        startMs,
+        endMs,
+        timestampMs: Math.round((startMs + endMs) / 2),
         confidence: 1,
-      }));
+      };
+    });
+
+  if (wordTokens.length > 0) {
+    return wordTokens;
   }
 
-  return fallbackWordsForClip(transcript, clip);
+  return approximateWordsFromSegments(transcript.segments, clip);
 }
 
-function fallbackWordsForClip(transcript: TranscriptJson, clip: ClipJson): CaptionWord[] {
-  const segments = transcript.segments || [];
-  const clipSegments = segments.filter(
-    (seg) => seg.endMs > clip.startMs && seg.startMs < clip.endMs,
-  );
+function approximateWordsFromSegments(segments: TranscriptSegment[], clip: ClipJson) {
+  const tokens: CaptionToken[] = [];
 
-  if (!clipSegments.length) {
-    return [];
-  }
+  for (const segment of segments) {
+    if (segment.endMs <= clip.startMs || segment.startMs >= clip.endMs) {
+      continue;
+    }
 
-  const words: CaptionWord[] = [];
-  const avgWordDurationMs = 200;
-  const minGapMs = 80;
+    const words = segment.text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      continue;
+    }
 
-  for (const segment of clipSegments) {
-    const segmentStart = Math.max(0, segment.startMs - clip.startMs);
-    const segmentEnd = Math.max(0, segment.endMs - clip.startMs);
-    const segmentText = segment.text || "";
-    const textTokens = segmentText.split(/\s+/).filter(Boolean);
-    const availableMs = segmentEnd - segmentStart;
-    const wordDuration = Math.max(avgWordDurationMs, availableMs / textTokens.length);
+    const segmentStart = clamp(segment.startMs - clip.startMs, 0, clip.durationMs);
+    const segmentEnd = clamp(segment.endMs - clip.startMs, segmentStart + 1, clip.durationMs);
+    const step = (segmentEnd - segmentStart) / words.length;
 
-    for (const [tokenIndex, token] of textTokens.entries()) {
-      const wordStartMs = segmentStart + tokenIndex * wordDuration;
-      const wordEndMs = Math.min(segmentEnd, wordStartMs + wordDuration - minGapMs);
-
-      words.push({
-        text: words.length === 0 ? token : ` ${token}`,
-        startMs: wordStartMs,
-        endMs: wordEndMs,
-        timestampMs: (wordStartMs + wordEndMs) / 2,
+    words.forEach((word, index) => {
+      const startMs = Math.round(segmentStart + step * index);
+      const endMs = Math.round(segmentStart + step * (index + 1));
+      tokens.push({
+        text: tokens.length === 0 ? word : ` ${word}`,
+        startMs,
+        endMs,
+        timestampMs: Math.round((startMs + endMs) / 2),
         confidence: 0.5,
       });
-    }
+    });
   }
 
-  return words;
+  return tokens;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }

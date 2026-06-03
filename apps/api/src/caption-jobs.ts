@@ -1,14 +1,13 @@
+import { renderCaptionedClip } from "./caption-renderer";
 import {
-  findCaptionJob,
   readCaptionJob,
+  readJob,
   readJsonFile,
-  readStoredVideoJob,
   saveCaptionJob,
   saveJob,
-  updateClipCaptionResult,
   videoPaths,
+  writeJsonFile,
 } from "./storage";
-import { renderCaptionedClip } from "./caption-renderer";
 import type {
   CaptionJobState,
   CaptionJobStatus,
@@ -51,78 +50,113 @@ async function processCaptionJob(job: CaptionJobState) {
   const paths = videoPaths(job.videoId);
 
   try {
-    await updateCaptionJob(job.videoId, job.jobId, "preparing", 5, "Loading saved video data.");
-
+    await updateCaptionJob(job, "preparing", 5, "Loading saved clip and transcript.");
     const [metadata, transcript, clips] = await Promise.all([
       readJsonFile<VideoMetadata>(paths.metadataJson),
       readJsonFile<TranscriptJson>(paths.transcriptJson),
       readJsonFile<ClipJson[]>(paths.clipsJson),
     ]);
 
-    if (!metadata) {
-      throw new Error("Video metadata was not found.");
+    if (!metadata || !transcript || !clips) {
+      throw new Error("Video metadata, transcript, or clips JSON is missing.");
     }
 
-    if (!transcript) {
-      throw new Error("Transcript was not found. Caption render does not call transcription again.");
-    }
-
-    if (!clips?.length) {
-      throw new Error("No clips were found.");
-    }
-
-    const clip = job.renderVersion
-      ? clips.find((c) => c.id === job.clipId && c.renderVersion === job.renderVersion)
-      : clips.find((c) => c.id === job.clipId);
-
+    const clip = findClip(clips, job.clipId, job.renderVersion);
     if (!clip) {
-      throw new Error(`Clip ${job.clipId} was not found.`);
+      throw new Error("Clip was not found.");
     }
 
-    if (!clip.outputPath) {
-      throw new Error(`Clip ${job.clipId} has no rendered output file. Run repair clips first.`);
-    }
-
-    const result = await renderCaptionedClip({
+    const output = await renderCaptionedClip({
       videoId: job.videoId,
       clip,
       transcript,
       settings: job.settings,
-      onProgress: async (progress, message) => {
-        await updateCaptionJob(job.videoId, job.jobId, "rendering_frames", progress, message);
-      },
+      onProgress: (progress, message) => updateCaptionJob(job, "rendering", progress, message),
     });
 
-    await updateCaptionJob(job.videoId, job.jobId, "encoding", 95, "Updating JSON records.");
-
-    await updateClipCaptionResult(job.videoId, job.clipId, job.renderVersion, {
-      ...result,
-    });
-
-    const mainJob = await buildUpdatedMainJob(
-      job.videoId,
-      metadata,
-      transcript,
-      clips,
+    await updateCaptionJob(job, "preparing", 96, "Updating clip JSON.");
+    const updatedClips = clips.map((item) =>
+      isSameClip(item, job.clipId, job.renderVersion)
+        ? {
+            ...item,
+            captionedOutputPath: output.outputPath,
+            captionStyle: job.settings.style,
+            captionEffect: job.settings.effect,
+            captionPosition: job.settings.position,
+            captionRenderVersion: output.captionRenderVersion,
+          }
+        : item,
     );
-    await saveJob(mainJob);
 
-    await completeCaptionJob(job.videoId, job.jobId, result);
+    await writeJsonFile(paths.clipsJson, updatedClips);
+    const mainJob = await writeMainJob(job.videoId, metadata, transcript, updatedClips);
+    await completeCaptionJob(job, mainJob);
   } catch (error) {
-    await failCaptionJob(job.videoId, job.jobId, error);
+    await failCaptionJob(job, error);
   }
 }
 
-async function buildUpdatedMainJob(
+async function updateCaptionJob(
+  original: CaptionJobState,
+  status: CaptionJobStatus,
+  progress: number,
+  message: string,
+) {
+  const existing = await readCaptionJob(original.videoId, original.jobId);
+  if (!existing) {
+    return;
+  }
+
+  await saveCaptionJob({
+    ...existing,
+    status,
+    progress: Math.min(99, Math.max(1, progress)),
+    message,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function completeCaptionJob(original: CaptionJobState, mainJob: JobState) {
+  const existing = await readCaptionJob(original.videoId, original.jobId);
+  if (!existing) {
+    return;
+  }
+
+  await saveCaptionJob({
+    ...existing,
+    status: "complete",
+    progress: 100,
+    message: "Caption render complete.",
+    updatedAt: new Date().toISOString(),
+    result: mainJob.result,
+  });
+}
+
+async function failCaptionJob(original: CaptionJobState, error: unknown) {
+  const existing = await readCaptionJob(original.videoId, original.jobId);
+  if (!existing) {
+    return;
+  }
+
+  await saveCaptionJob({
+    ...existing,
+    status: "failed",
+    progress: Math.max(existing.progress, 1),
+    message: "Caption render failed.",
+    error: error instanceof Error ? error.message : "Unknown caption render error.",
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function writeMainJob(
   videoId: string,
   video: VideoMetadata,
   transcript: TranscriptJson,
   clips: ClipJson[],
 ): Promise<JobState> {
-  const existingJob = (await readStoredVideoJob(videoId));
+  const existingJob = await readJob(videoId);
   const now = new Date().toISOString();
-
-  return {
+  const mainJob: JobState = {
     jobId: existingJob?.jobId || `cached_${videoId}`,
     videoId,
     status: "complete",
@@ -136,65 +170,23 @@ async function buildUpdatedMainJob(
       clips,
     },
   };
+
+  await saveJob(mainJob);
+  return mainJob;
 }
 
-async function updateCaptionJob(
-  videoId: string,
-  jobId: string,
-  status: CaptionJobStatus,
-  progress: number,
-  message: string,
-) {
-  const job = await readCaptionJob(videoId, jobId);
-
-  if (!job) {
-    throw new Error("Caption job was not found.");
-  }
-
-  await saveCaptionJob({
-    ...job,
-    status,
-    progress,
-    message,
-    updatedAt: new Date().toISOString(),
-  });
+function findClip(clips: ClipJson[], clipId: string, renderVersion?: string) {
+  return clips.find((clip) => isSameClip(clip, clipId, renderVersion));
 }
 
-async function completeCaptionJob(
-  videoId: string,
-  jobId: string,
-  result: NonNullable<CaptionJobState["result"]>,
-) {
-  const job = await readCaptionJob(videoId, jobId);
-
-  if (!job) {
-    throw new Error("Caption job was not found.");
+function isSameClip(clip: ClipJson, clipId: string, renderVersion?: string) {
+  if (clip.id !== clipId) {
+    return false;
   }
 
-  await saveCaptionJob({
-    ...job,
-    status: "complete",
-    progress: 100,
-    message: "Caption render complete.",
-    updatedAt: new Date().toISOString(),
-    result,
-  });
-}
-
-async function failCaptionJob(videoId: string, jobId: string, error: unknown) {
-  const job = await readCaptionJob(videoId, jobId);
-  const message = error instanceof Error ? error.message : "Unknown caption error.";
-
-  if (!job) {
-    return;
+  if (renderVersion) {
+    return clip.renderVersion === renderVersion;
   }
 
-  await saveCaptionJob({
-    ...job,
-    status: "failed",
-    progress: Math.max(job.progress, 1),
-    message: "Caption render failed.",
-    error: message,
-    updatedAt: new Date().toISOString(),
-  });
+  return !clip.renderVersion;
 }

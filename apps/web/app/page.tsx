@@ -17,6 +17,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  CaptionPreviewPlayer,
+  type CaptionSettings,
+} from "./caption-preview";
 
 type JobStatus =
   | "queued"
@@ -56,6 +60,13 @@ type TranscriptSegment = {
   speakerLabel?: string;
 };
 
+type TranscriptWord = {
+  word: string;
+  startMs: number;
+  endMs: number;
+  speakerLabel?: string;
+};
+
 type ClipResult = {
   id: string;
   title: string;
@@ -74,9 +85,9 @@ type ClipResult = {
   outputHeight?: number;
   renderVersion?: string;
   captionedMediaUrl?: string;
-  captionStyle?: CaptionStylePreset;
-  captionEffect?: CaptionEffect;
-  captionPosition?: CaptionPosition;
+  captionStyle?: CaptionSettings["style"];
+  captionEffect?: CaptionSettings["effect"];
+  captionPosition?: CaptionSettings["position"];
   captionRenderVersion?: string;
 };
 
@@ -92,6 +103,7 @@ type ProcessResult = {
   transcript: {
     text: string;
     segments: TranscriptSegment[];
+    words?: TranscriptWord[];
     durationMs?: number;
   };
   clips: ClipResult[];
@@ -117,46 +129,22 @@ type ReframeJobState = {
   result?: ProcessResult;
 };
 
-type CaptionStylePreset =
-  | "basic" | "modern" | "scribble" | "funky" | "ali" | "classic" | "heat"
-  | "icy" | "ghost" | "editorial" | "tallboy" | "elegant" | "hormozi" | "clean"
-  | "roundtable" | "matrix" | "bubbly" | "miner";
-
-type CaptionEffect = "none" | "magic" | "squiggle" | "scroll";
-
-type CaptionPosition = "top" | "center" | "bottom";
-
-type CaptionSettings = {
-  style: CaptionStylePreset;
-  effect: CaptionEffect;
-  position: CaptionPosition;
-  maxWordsPerPage: number;
-  maxPageDurationMs: number;
-};
-
 type CaptionJobStatus =
-  | "queued" | "preparing" | "rendering_frames" | "encoding" | "complete" | "failed";
+  | "queued"
+  | "preparing"
+  | "rendering"
+  | "complete"
+  | "failed";
 
 type CaptionJobState = {
   jobId: string;
   videoId: string;
   clipId: string;
-  renderVersion?: string;
   status: CaptionJobStatus;
   progress: number;
   message: string;
-  settings: CaptionSettings;
-  createdAt: string;
-  updatedAt: string;
   error?: string;
-  result?: {
-    outputPath: string;
-    mediaUrl?: string;
-    width: number;
-    height: number;
-    fps: number;
-    durationMs: number;
-  };
+  result?: ProcessResult;
 };
 
 type StoredVideoSummary = {
@@ -201,6 +189,7 @@ export default function Home() {
   const [videoId, setVideoId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
   const [reframeJob, setReframeJob] = useState<ReframeJobState | null>(null);
+  const [captionJob, setCaptionJob] = useState<CaptionJobState | null>(null);
   const [reframeJobs, setReframeJobs] = useState<ReframeJobSummary[]>([]);
   const [storedVideos, setStoredVideos] = useState<StoredVideoSummary[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -208,7 +197,6 @@ export default function Home() {
   const [isLoadingReframeJobs, setIsLoadingReframeJobs] = useState(false);
   const [isCleaningReframes, setIsCleaningReframes] = useState(false);
   const [isRepairingClips, setIsRepairingClips] = useState(false);
-  const [captionJobs, setCaptionJobs] = useState<Record<string, CaptionJobState>>({});
   const [error, setError] = useState<string | null>(null);
 
   const isProcessing = Boolean(
@@ -219,7 +207,12 @@ export default function Home() {
     reframeJob.status !== "complete" &&
     reframeJob.status !== "failed",
   );
-  const isBusy = isProcessing || isReframing;
+  const isCaptioning = Boolean(
+    captionJob &&
+    captionJob.status !== "complete" &&
+    captionJob.status !== "failed",
+  );
+  const isBusy = isProcessing || isReframing || isCaptioning;
 
   const originalVideoUrl = useMemo(
     () => absoluteApiUrl(job?.result?.originalVideoUrl),
@@ -343,137 +336,63 @@ export default function Home() {
     };
   }, [reframeJob?.jobId]);
 
-  const activeCaptionJobIds = useMemo(
-    () =>
-      Object.values(captionJobs)
-        .filter((cj) => cj.status !== "complete" && cj.status !== "failed")
-        .map((cj) => cj.jobId),
-    [captionJobs],
-  );
-
-  const activeJobCount = activeCaptionJobIds.length;
-  const activeIdString = activeCaptionJobIds.join(",");
-
   useEffect(() => {
-    if (activeJobCount === 0) {
+    if (!captionJob?.jobId) {
       return;
     }
 
     let cancelled = false;
-    const pollIntervalMs = 5_000;
 
-    const pollCaptionJobs = async () => {
-      const ids = activeIdString ? activeIdString.split(",") : [];
-
+    const pollCaption = async () => {
       while (!cancelled) {
-        for (const jobId of ids) {
-          try {
-            const response = await fetch(
-              `${API_BASE_URL}/caption-jobs/${jobId}/status`,
-            );
-            const text = await response.text();
-            let payload: CaptionJobState;
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/caption-jobs/${captionJob.jobId}/status`,
+          );
+          const payload = await response.json();
 
-            try {
-              payload = text ? JSON.parse(text) : {};
-            } catch {
-              continue;
-            }
-
-            if (!response.ok) {
-              continue;
-            }
-
-            setCaptionJobs((prev) => ({ ...prev, [jobId]: payload }));
-
-            if (payload.status === "complete" || payload.status === "failed") {
-              if (payload.status === "complete") {
-                setJob((current) => {
-                  if (!current?.result) {
-                    return current;
-                  }
-
-                  const updatedClips = current.result.clips.map((clip) => {
-                    if (clip.id === payload.clipId) {
-                      return {
-                        ...clip,
-                        captionedMediaUrl: payload.result?.mediaUrl,
-                      };
-                    }
-
-                    return clip;
-                  });
-
-                  return {
-                    ...current,
-                    result: { ...current.result, clips: updatedClips },
-                  };
-                });
-              }
-            }
-          } catch {
-            // polling error, continue
+          if (!response.ok) {
+            throw new Error(payload.error || "Could not load caption status.");
           }
-        }
 
-        if (cancelled) {
+          setCaptionJob(payload);
+
+          if (payload.status === "complete") {
+            if (payload.result) {
+              setJob({
+                jobId: `cached_${payload.videoId}`,
+                videoId: payload.videoId,
+                status: "complete",
+                progress: 100,
+                message: "Processing complete.",
+                result: payload.result,
+              });
+            }
+            break;
+          }
+
+          if (payload.status === "failed") {
+            break;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        } catch (pollError) {
+          setError(
+            pollError instanceof Error
+              ? pollError.message
+              : "Caption polling failed.",
+          );
           break;
         }
-
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       }
     };
 
-    void pollCaptionJobs();
+    void pollCaption();
 
     return () => {
       cancelled = true;
     };
-  }, [activeJobCount, activeIdString]);
-
-  async function handleStartCaption(clipId: string, renderVersion: string | undefined, settings: CaptionSettings) {
-    if (!job?.videoId) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/videos/${job.videoId}/clips/${clipId}/captions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            renderVersion,
-            ...settings,
-          }),
-        },
-      );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Could not start caption render.");
-      }
-
-      setCaptionJobs((prev) => ({
-        ...prev,
-        [payload.jobId]: {
-          jobId: payload.jobId,
-          videoId: payload.videoId,
-          clipId,
-          status: "queued",
-          progress: 1,
-          message: "Queued caption render.",
-          settings,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      }));
-    } catch (captionError) {
-      setError(
-        captionError instanceof Error ? captionError.message : "Caption render failed to start.",
-      );
-    }
-  }
+  }, [captionJob?.jobId]);
 
   async function loadStoredVideos() {
     setIsLoadingStoredVideos(true);
@@ -746,6 +665,51 @@ export default function Home() {
     }
   }
 
+  async function handleRenderCaptions(clip: ClipResult, settings: CaptionSettings) {
+    if (!job?.videoId) {
+      setError("Open a processed video before rendering captions.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/videos/${job.videoId}/clips/${clip.id}/captions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            renderVersion: clip.renderVersion,
+            ...settings,
+          }),
+        },
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not start caption render.");
+      }
+
+      setCaptionJob({
+        jobId: payload.jobId,
+        videoId: payload.videoId,
+        clipId: payload.clipId,
+        status: "queued",
+        progress: 1,
+        message: "Queued caption render.",
+      });
+    } catch (captionError) {
+      setError(
+        captionError instanceof Error
+          ? captionError.message
+          : "Caption render failed to start.",
+      );
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-zinc-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -822,7 +786,12 @@ export default function Home() {
               />
             ) : null}
 
-            <StatusPanel job={job} reframeJob={reframeJob} error={error} />
+            <StatusPanel
+              job={job}
+              reframeJob={reframeJob}
+              captionJob={captionJob}
+              error={error}
+            />
             <TranscriptPanel
               segments={job?.result?.transcript.segments || []}
               className=""
@@ -832,9 +801,10 @@ export default function Home() {
 
         <ClipsPanel
           clips={job?.result?.clips || []}
-          segments={job?.result?.transcript.segments || []}
-          captionJobs={captionJobs}
-          onStartCaption={handleStartCaption}
+          transcript={job?.result?.transcript}
+          activeCaptionJob={captionJob}
+          isCaptioning={isCaptioning}
+          onRenderCaptions={handleRenderCaptions}
         />
       </div>
     </main>
@@ -1113,14 +1083,20 @@ function StoredVideosPanel({
 function StatusPanel({
   job,
   reframeJob,
+  captionJob,
   error,
 }: {
   job: JobState | null;
   reframeJob: ReframeJobState | null;
+  captionJob: CaptionJobState | null;
   error: string | null;
 }) {
   const active =
-    reframeJob && reframeJob.status !== "complete" ? reframeJob : job;
+    captionJob && captionJob.status !== "complete"
+      ? captionJob
+      : reframeJob && reframeJob.status !== "complete"
+        ? reframeJob
+        : job;
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
@@ -1438,13 +1414,9 @@ function TranscriptPanel({ segments, className = "" }: TranscriptPanelProps) {
 function ClipsPanel({
   clips,
   segments,
-  captionJobs,
-  onStartCaption,
 }: {
   clips: ClipResult[];
   segments: TranscriptSegment[];
-  captionJobs: Record<string, CaptionJobState>;
-  onStartCaption: (clipId: string, renderVersion: string | undefined, settings: CaptionSettings) => void;
 }) {
   const [expandedClipIds, setExpandedClipIds] = useState<Set<string>>(
     new Set(),
@@ -1480,9 +1452,6 @@ function ClipsPanel({
 
         {clips.map((clip, index) => {
           const clipSegments = getClipSegments(clip, segments);
-          const clipCaptionJobs = Object.values(captionJobs).filter(
-            (cj) => cj.clipId === clip.id,
-          );
 
           return (
             <ClipCard
@@ -1492,8 +1461,6 @@ function ClipsPanel({
               segments={clipSegments}
               isExpanded={expandedClipIds.has(clip.id)}
               onToggle={() => toggleClip(clip.id)}
-              captionJobs={clipCaptionJobs}
-              onStartCaption={onStartCaption}
             />
           );
         })}
@@ -1502,38 +1469,20 @@ function ClipsPanel({
   );
 }
 
-const CAPTION_STYLES: CaptionStylePreset[] = [
-  "basic", "modern", "scribble", "funky", "ali", "classic", "heat",
-  "icy", "ghost", "editorial", "tallboy", "elegant", "hormozi", "clean",
-  "roundtable", "matrix", "bubbly", "miner",
-];
-
 function ClipCard({
   clip,
   index,
   segments,
   isExpanded,
   onToggle,
-  captionJobs,
-  onStartCaption,
 }: {
   clip: ClipResult;
   index: number;
   segments: TranscriptSegment[];
   isExpanded: boolean;
   onToggle: () => void;
-  captionJobs: CaptionJobState[];
-  onStartCaption: (clipId: string, renderVersion: string | undefined, settings: CaptionSettings) => void;
 }) {
-  const [captionStyle, setCaptionStyle] = useState<CaptionStylePreset>("hormozi");
-  const [captionEffect, setCaptionEffect] = useState<CaptionEffect>("magic");
-  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>("bottom");
-  const [showCaptionControls, setShowCaptionControls] = useState(false);
-
-  const mediaUrl = absoluteApiUrl(clip.captionedMediaUrl || clip.mediaUrl);
-  const activeCaptionJob = captionJobs.find(
-    (cj) => cj.status !== "complete" && cj.status !== "failed",
-  );
+  const mediaUrl = absoluteApiUrl(clip.mediaUrl);
   const layoutClass =
     clip.aspectRatio === "9:16"
       ? "lg:grid-cols-[260px_1fr]"
@@ -1587,98 +1536,6 @@ function ClipCard({
               }
             />
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowCaptionControls((v) => !v)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50"
-            >
-              <Sparkles className="size-3.5" />
-              Captions
-            </button>
-            {activeCaptionJob ? (
-              <span className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-                <Loader2 className="size-3 animate-spin" />
-                {activeCaptionJob.message}
-              </span>
-            ) : null}
-            {clip.captionedMediaUrl ? (
-              <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                Captioned
-              </span>
-            ) : null}
-          </div>
-
-          {showCaptionControls ? (
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">Style</span>
-                  <select
-                    value={captionStyle}
-                    onChange={(e) => setCaptionStyle(e.target.value as CaptionStylePreset)}
-                    disabled={Boolean(activeCaptionJob)}
-                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-xs disabled:bg-zinc-100"
-                  >
-                    {CAPTION_STYLES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">Effect</span>
-                  <select
-                    value={captionEffect}
-                    onChange={(e) => setCaptionEffect(e.target.value as CaptionEffect)}
-                    disabled={Boolean(activeCaptionJob)}
-                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-xs disabled:bg-zinc-100"
-                  >
-                    <option value="none">None</option>
-                    <option value="magic">Magic</option>
-                    <option value="squiggle">Squiggle</option>
-                    <option value="scroll">Scroll</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">Position</span>
-                  <select
-                    value={captionPosition}
-                    onChange={(e) => setCaptionPosition(e.target.value as CaptionPosition)}
-                    disabled={Boolean(activeCaptionJob)}
-                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-xs disabled:bg-zinc-100"
-                  >
-                    <option value="top">Top</option>
-                    <option value="center">Center</option>
-                    <option value="bottom">Bottom</option>
-                  </select>
-                </label>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onStartCaption(clip.id, clip.renderVersion, {
-                        style: captionStyle,
-                        effect: captionEffect,
-                        position: captionPosition,
-                        maxWordsPerPage: 5,
-                        maxPageDurationMs: 1800,
-                      })
-                    }
-                    disabled={Boolean(activeCaptionJob) || !clip.mediaUrl}
-                    className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-zinc-950 px-3 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {activeCaptionJob ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="size-3.5" />
-                    )}
-                    {activeCaptionJob ? "Rendering" : "Render"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
 
           <p className="rounded-md bg-zinc-50 p-3 text-sm leading-6 text-zinc-700">
             {segments[0]?.text ||

@@ -1,30 +1,30 @@
-import { mkdir, rm } from "node:fs/promises";
+import { createReadStream, statSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { mkdir } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import type { AddressInfo } from "node:net";
 
 import { bundle } from "@remotion/bundler";
-import { getCompositions, openBrowser, renderFrames } from "@remotion/renderer";
+import { renderMedia, selectComposition } from "@remotion/renderer";
 
-import { readClipMediaDetails, encodeCaptionFramesToMp4 } from "./ffmpeg";
-import { wordsForClip } from "./caption-words";
 import { captionSettingsSlug } from "./caption-settings";
-import { tmpRoot, videoPaths } from "./storage";
-import type { CaptionSettings, CaptionWord, ClipJson, TranscriptJson } from "./types";
+import { wordsForClip } from "./caption-words";
+import { readClipMediaDetails } from "./ffmpeg";
+import { videoPaths } from "./storage";
+import type { CaptionSettings, ClipJson, TranscriptJson } from "./types";
 
-export type RenderCaptionedClipInput = {
+type RenderProgress = (progress: number, message: string) => Promise<void> | void;
+
+type RenderCaptionedClipInput = {
   videoId: string;
   clip: ClipJson;
   transcript: TranscriptJson;
   settings: CaptionSettings;
-  onProgress?: (progress: number, message: string) => Promise<void> | void;
+  onProgress?: RenderProgress;
 };
 
-export type CaptionRenderResult = {
-  outputPath: string;
-  width: number;
-  height: number;
-  fps: number;
-  durationMs: number;
-};
+let bundleLocationPromise: Promise<string> | undefined;
 
 export async function renderCaptionedClip({
   videoId,
@@ -32,117 +32,132 @@ export async function renderCaptionedClip({
   transcript,
   settings,
   onProgress,
-}: RenderCaptionedClipInput): Promise<CaptionRenderResult> {
-  const clipPath = clip.outputPath;
-
-  if (!clipPath) {
-    throw new Error("Clip output path is missing.");
+}: RenderCaptionedClipInput) {
+  if (!clip.outputPath) {
+    throw new Error("Clip file is missing. Render or repair the clip before adding captions.");
   }
 
-  await onProgress?.(10, "Probing clip media details.");
-
-  const mediaDetails = await readClipMediaDetails(clipPath);
-
-  await onProgress?.(15, "Converting transcript words for captions.");
-
-  const captionWords = wordsForClip(transcript, clip);
-
-  if (!captionWords.length) {
-    throw new Error("No timestamped words available for captions.");
+  if (!(await Bun.file(clip.outputPath).exists())) {
+    throw new Error("Clip output file is missing on disk. Use Repair files before adding captions.");
   }
 
+  await onProgress?.(8, "Reading clip media details.");
+  const media = await readClipMediaDetails(clip.outputPath);
+  const captions = wordsForClip(transcript, clip);
+
+  if (captions.length === 0) {
+    throw new Error("No timestamped words were found for this clip.");
+  }
+
+  await onProgress?.(15, "Preparing Remotion bundle.");
+  const serveUrl = await getBundleLocation();
+  const fileServer = await serveFile(clip.outputPath);
   const paths = videoPaths(videoId);
-  const slug = captionSettingsSlug(settings);
-  const clipRenderSlug = clip.renderVersion || "original";
-  const outputFilename = `${clip.id}_${clipRenderSlug}_${slug}.mp4`;
-  const outputPath = path.join(paths.captionsDir, outputFilename);
+  const captionSlug = captionSettingsSlug(settings);
+  const clipSlug = clip.renderVersion || "base";
+  const outputPath = path.join(paths.captionsDir, `${clip.id}_${clipSlug}_${captionSlug}.mp4`);
 
-  const jobTmp = path.join(tmpRoot, `${clip.id}_${slug}`);
-  const framesDir = path.join(jobTmp, "frames");
-
-  await mkdir(framesDir, { recursive: true });
+  await mkdir(paths.captionsDir, { recursive: true });
 
   try {
-    await onProgress?.(20, "Bundling Remotion composition.");
-
-    const fileUrl = `file:///${clipPath.replace(/\\/g, "/")}`;
-
-    const captionedWords = captionWords.map((word, index) => ({
-      text: word.text,
-      startMs: word.startMs,
-      endMs: word.endMs,
-      timestampMs: word.timestampMs,
-      confidence: word.confidence,
-      index,
-    }));
-
-    const bundled = await bundle({
-      entryPoint: path.resolve(import.meta.dir, "captions/remotion/index.ts"),
-    });
-
     const inputProps = {
-      clipSrc: fileUrl,
-      captions: captionedWords,
+      clipSrc: fileServer.url,
+      captions,
       style: settings.style,
       effect: settings.effect,
       position: settings.position,
-      fps: mediaDetails.fps,
-      width: mediaDetails.width,
-      height: mediaDetails.height,
       maxWordsPerPage: settings.maxWordsPerPage,
       maxPageDurationMs: settings.maxPageDurationMs,
+      width: media.width,
+      height: media.height,
+      fps: media.fps,
+      durationInFrames: media.durationInFrames,
     };
 
-    const compositions = await getCompositions(bundled, { inputProps });
-    const composition = compositions.find((item) => item.id === "CaptionedClip");
+    const composition = await selectComposition({
+      serveUrl,
+      id: "CaptionedClip",
+      inputProps,
+    });
 
-    if (!composition) {
-      throw new Error("Remotion composition 'CaptionedClip' was not found.");
-    }
-
-    const puppeteerInstance = await openBrowser("chrome");
-
-    try {
-      await onProgress?.(25, "Rendering caption frames.");
-
-      const totalFrames = mediaDetails.durationInFrames;
-
-      await renderFrames({
-        serveUrl: bundled,
-        composition: {
-          ...composition,
-          durationInFrames: totalFrames,
-          fps: mediaDetails.fps,
-          width: mediaDetails.width,
-          height: mediaDetails.height,
-        },
-        inputProps,
-        imageFormat: "png",
-        outputDir: framesDir,
-        puppeteerInstance,
-        onStart: () => {},
-        onFrameUpdate: (frame: number) => {
-          const progress = 25 + Math.round((frame / totalFrames) * 65);
-          void onProgress?.(progress, `Rendering frame ${frame + 1} of ${totalFrames}.`);
-        },
-      });
-
-      await onProgress?.(90, "Encoding MP4 with FFmpeg.");
-      await encodeCaptionFramesToMp4(framesDir, clipPath, outputPath, mediaDetails.fps);
-
-      await onProgress?.(95, "Finalizing output.");
-    } finally {
-      await puppeteerInstance.close({ silent: true });
-    }
+    await onProgress?.(25, "Rendering captioned video with Remotion.");
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: "h264",
+      outputLocation: outputPath,
+      inputProps,
+      concurrency: Math.max(1, Math.min(4, navigatorHardwareConcurrency())),
+      onProgress: ({ progress }) => {
+        void onProgress?.(25 + Math.round(progress * 70), "Rendering captioned video.");
+      },
+    });
 
     return {
       outputPath,
-      width: mediaDetails.width,
-      height: mediaDetails.height,
-      fps: mediaDetails.fps,
-      durationMs: mediaDetails.durationMs,
+      width: media.width,
+      height: media.height,
+      fps: media.fps,
+      durationMs: media.durationMs,
+      captionRenderVersion: captionSlug,
     };
   } finally {
-    await rm(jobTmp, { recursive: true, force: true }).catch(() => {});
+    fileServer.close();
   }
+}
+
+function getBundleLocation() {
+  if (!bundleLocationPromise) {
+    bundleLocationPromise = bundle({
+      entryPoint: path.resolve(import.meta.dir, "captions/remotion/index.tsx"),
+    });
+  }
+
+  return bundleLocationPromise;
+}
+
+function serveFile(filePath: string): Promise<{ url: string; close: () => void }> {
+  const { size } = statSync(filePath);
+
+  function handleRequest(req: IncomingMessage, res: ServerResponse) {
+    const range = req.headers.range;
+
+    if (range) {
+      const match = range.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = Number(match[1]);
+        const end = match[2] ? Number(match[2]) : size - 1;
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start}-${end}/${size}`,
+          "Accept-Ranges": "bytes",
+          "Content-Type": "video/mp4",
+          "Content-Length": end - start + 1,
+        });
+        createReadStream(filePath, { start, end }).pipe(res);
+        return;
+      }
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "video/mp4",
+      "Accept-Ranges": "bytes",
+      "Content-Length": size,
+    });
+    createReadStream(filePath).pipe(res);
+  }
+
+  return new Promise((resolve) => {
+    const server: Server = createServer(handleRequest);
+    server.listen(0, "127.0.0.1", () => {
+      const port = (server.address() as AddressInfo).port;
+      resolve({
+        url: `http://127.0.0.1:${port}/clip.mp4`,
+        close: () => server.close(),
+      });
+    });
+  });
+}
+
+function navigatorHardwareConcurrency() {
+  return Number(process.env.REMOTION_CONCURRENCY || os.cpus().length || 2);
 }

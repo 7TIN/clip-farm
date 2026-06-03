@@ -1,5 +1,5 @@
 import React from "react";
-import { Composition } from "remotion";
+import { Composition, registerRoot } from "remotion";
 import { CaptionedClip } from "./CaptionedClip";
 import type { CaptionedClipProps } from "./types";
 
@@ -9,23 +9,30 @@ const defaultProps: CaptionedClipProps = {
   style: "hormozi",
   effect: "magic",
   position: "bottom",
-  fps: 30,
+  maxWordsPerPage: 6,
+  maxPageDurationMs: 1800,
   width: 1080,
   height: 1920,
-  maxWordsPerPage: 5,
-  maxPageDurationMs: 1800,
+  fps: 30,
+  durationInFrames: 30,
 };
 
-export const Root: React.FC = () => {
-  return (
-    <Composition
-      id="CaptionedClip"
-      component={CaptionedClip}
-      durationInFrames={1}
-      fps={30}
-      width={1080}
-      height={1920}
-      defaultProps={defaultProps}
-    />
-  );
-};
+const Root: React.FC = () => (
+  <Composition
+    id="CaptionedClip"
+    component={CaptionedClip}
+    defaultProps={defaultProps}
+    width={1080}
+    height={1920}
+    fps={30}
+    durationInFrames={30}
+    calculateMetadata={({ props }) => ({
+      width: props.width,
+      height: props.height,
+      fps: props.fps,
+      durationInFrames: props.durationInFrames,
+    })}
+  />
+);
+
+registerRoot(Root);

@@ -5,24 +5,19 @@ import type {
   CaptionStylePreset,
 } from "./types";
 
-const stylePresets: CaptionStylePreset[] = [
-  "basic", "modern", "scribble", "funky", "ali", "classic", "heat",
-  "icy", "ghost", "editorial", "tallboy", "elegant", "hormozi", "clean",
-  "roundtable", "matrix", "bubbly", "miner",
-];
-
-const effects: CaptionEffect[] = ["none", "magic", "squiggle", "scroll"];
+const styles: CaptionStylePreset[] = ["basic", "hormozi", "bubbly"];
+const effects: CaptionEffect[] = ["none", "magic"];
 const positions: CaptionPosition[] = ["top", "center", "bottom"];
 
 export const defaultCaptionSettings = resolveCaptionSettings({});
 
 export function resolveCaptionSettings(input: Record<string, unknown>): CaptionSettings {
   return {
-    style: coerceChoice(input.style, stylePresets, "hormozi"),
+    style: coerceChoice(input.style, styles, "hormozi"),
     effect: coerceChoice(input.effect, effects, "magic"),
     position: coerceChoice(input.position, positions, "bottom"),
-    maxWordsPerPage: coerceNumber(input.maxWordsPerPage, 5, 2, 8),
-    maxPageDurationMs: coerceNumber(input.maxPageDurationMs, 1800, 800, 3000),
+    maxWordsPerPage: coerceNumber(input.maxWordsPerPage, 6, 2, 10),
+    maxPageDurationMs: coerceNumber(input.maxPageDurationMs, 1800, 700, 3500),
   };
 }
 
@@ -39,11 +34,10 @@ function coerceChoice<T extends string>(value: unknown, choices: T[], fallback: 
 }
 
 function coerceNumber(value: unknown, fallback: number, min: number, max: number) {
-  const num = typeof value === "number" ? value : Number(value);
-
-  if (Number.isFinite(num)) {
-    return Math.max(min, Math.min(max, Math.round(num)));
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
   }
 
-  return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
 }

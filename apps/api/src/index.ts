@@ -15,11 +15,13 @@ import {
   videoPaths,
 } from "./storage";
 import { startProcessing } from "./processor";
+import { startCaptionJob } from "./caption-jobs";
 import {
   deleteReframeVariant,
   listReframeJobs,
   repairMissingClipFiles,
 } from "./reframe-maintenance";
+import { resolveCaptionSettings } from "./caption-settings";
 import { resolveReframeSettings } from "./reframe-settings";
 import { startReframeJob } from "./reframe";
 import { resolveCaptionSettings } from "./caption-settings";
@@ -177,6 +179,51 @@ app.post("/videos/:videoId/reframe", async (c) => {
     },
     202,
   );
+});
+
+app.post("/videos/:videoId/clips/:clipId/captions", async (c) => {
+  const videoId = c.req.param("videoId");
+  const clipId = c.req.param("clipId");
+  const body = await c.req.json().catch(() => ({}));
+  const existingJob = await readStoredVideoJob(videoId);
+
+  if (!existingJob?.result) {
+    return c.json({ error: "Video must be processed before captions can be rendered." }, 404);
+  }
+
+  const renderVersion = typeof body.renderVersion === "string" ? body.renderVersion : undefined;
+  const clip = existingJob.result.clips.find((item) => {
+    if (item.id !== clipId) return false;
+    return renderVersion ? item.renderVersion === renderVersion : !item.renderVersion;
+  });
+
+  if (!clip?.outputPath) {
+    return c.json({ error: "Rendered clip not found. Render or repair the clip first." }, 404);
+  }
+
+  const settings = resolveCaptionSettings(body);
+  const job = await startCaptionJob(videoId, clipId, renderVersion, settings);
+
+  return c.json(
+    {
+      videoId,
+      clipId,
+      jobId: job.jobId,
+      statusUrl: `/caption-jobs/${job.jobId}/status`,
+    },
+    202,
+  );
+});
+
+app.get("/caption-jobs/:jobId/status", async (c) => {
+  const jobId = c.req.param("jobId");
+  const job = await findCaptionJob(jobId);
+
+  if (!job) {
+    return c.json({ error: "Caption job not found." }, 404);
+  }
+
+  return c.json(withCaptionPublicUrls(job));
 });
 
 app.get("/reframes/:jobId/status", async (c) => {
@@ -342,6 +389,28 @@ app.get("/videos/:videoId/clips/:clipId/file", async (c) => {
   });
 });
 
+app.get("/videos/:videoId/clips/:clipId/captioned-file", async (c) => {
+  const videoId = c.req.param("videoId");
+  const clipId = c.req.param("clipId");
+  const renderVersion = c.req.query("version");
+  const clip = await getClipById(videoId, clipId, renderVersion);
+
+  if (!clip?.captionedOutputPath) {
+    return c.json({ error: "Captioned clip not found." }, 404);
+  }
+
+  const file = Bun.file(clip.captionedOutputPath);
+  if (!(await file.exists())) {
+    return c.json({ error: "Captioned clip file is missing." }, 404);
+  }
+
+  return new Response(file, {
+    headers: {
+      "Content-Type": "video/mp4",
+    },
+  });
+});
+
 function withPublicUrls(job: JobState) {
   if (!job.result) {
     return job;
@@ -375,7 +444,11 @@ function withClipUrl(videoId: string, clip: ClipJson) {
       ? `/videos/${videoId}/clips/${clip.id}/file${versionQuery}`
       : undefined,
     captionedMediaUrl: clip.captionedOutputPath
+<<<<<<< HEAD
+      ? `/videos/${videoId}/clips/${clip.id}/captioned-file${versionQuery}`
+=======
       ? `/videos/${videoId}/clips/${clip.id}/captioned-file${captionVersionQuery}`
+>>>>>>> origin/main
       : undefined,
   };
 }
@@ -396,16 +469,17 @@ function withReframePublicUrls(job: ReframeJobState) {
 }
 
 function withCaptionPublicUrls(job: CaptionJobState) {
+  if (!job.result) {
+    return job;
+  }
+
   return {
     ...job,
-    result: job.result
-      ? {
-          ...job.result,
-          mediaUrl: job.result.outputPath
-            ? `/videos/${job.videoId}/clips/${job.clipId}/captioned-file?captionVersion=${encodeURIComponent(job.settings.style + "-" + job.settings.effect + "-" + job.settings.position)}`
-            : undefined,
-        }
-      : undefined,
+    result: {
+      ...job.result,
+      originalVideoUrl: `/videos/${job.videoId}/original`,
+      clips: job.result.clips.map((clip) => withClipUrl(job.videoId, clip)),
+    },
   };
 }
 

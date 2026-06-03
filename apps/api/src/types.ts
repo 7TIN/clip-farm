@@ -132,27 +132,9 @@ export type TranscriptWord = {
   speakerLabel?: string;
 };
 
-export type CaptionStylePreset =
-  | "basic"
-  | "modern"
-  | "scribble"
-  | "funky"
-  | "ali"
-  | "classic"
-  | "heat"
-  | "icy"
-  | "ghost"
-  | "editorial"
-  | "tallboy"
-  | "elegant"
-  | "hormozi"
-  | "clean"
-  | "roundtable"
-  | "matrix"
-  | "bubbly"
-  | "miner";
+export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
 
-export type CaptionEffect = "none" | "magic" | "squiggle" | "scroll";
+export type CaptionEffect = "none" | "magic";
 
 export type CaptionPosition = "top" | "center" | "bottom";
 
@@ -164,7 +146,7 @@ export type CaptionSettings = {
   maxPageDurationMs: number;
 };
 
-export type CaptionWord = {
+export type CaptionToken = {
   text: string;
   startMs: number;
   endMs: number;
@@ -175,8 +157,7 @@ export type CaptionWord = {
 export type CaptionJobStatus =
   | "queued"
   | "preparing"
-  | "rendering_frames"
-  | "encoding"
+  | "rendering"
   | "complete"
   | "failed";
 
@@ -192,14 +173,7 @@ export type CaptionJobState = {
   createdAt: string;
   updatedAt: string;
   error?: string;
-  result?: {
-    outputPath: string;
-    mediaUrl?: string;
-    width: number;
-    height: number;
-    fps: number;
-    durationMs: number;
-  };
+  result?: ProcessResult;
 };
 
 export type ClipJson = {

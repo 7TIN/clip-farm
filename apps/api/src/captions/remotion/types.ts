@@ -6,14 +6,6 @@ export type CaptionToken = {
   endMs: number;
   timestampMs: number;
   confidence: number;
-  index: number;
-};
-
-export type CaptionPage = {
-  id: string;
-  startMs: number;
-  endMs: number;
-  tokens: CaptionToken[];
 };
 
 export type CaptionedClipProps = {
@@ -22,9 +14,17 @@ export type CaptionedClipProps = {
   style: CaptionStylePreset;
   effect: CaptionEffect;
   position: CaptionPosition;
-  fps: number;
-  width: number;
-  height: number;
   maxWordsPerPage: number;
   maxPageDurationMs: number;
+  width: number;
+  height: number;
+  fps: number;
+  durationInFrames: number;
+};
+
+export type CaptionPage = {
+  id: string;
+  startMs: number;
+  endMs: number;
+  tokens: CaptionToken[];
 };

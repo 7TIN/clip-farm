@@ -1,74 +1,53 @@
 import type { CaptionPage, CaptionToken } from "./types";
 
-type PageInput = {
-  tokens: CaptionToken[];
-  maxWordsPerPage: number;
-  maxPageDurationMs: number;
-};
-
-const punctuationBreakPattern = /[.!?;:]$/;
-
-export function groupIntoPages(input: PageInput): CaptionPage[] {
-  const { tokens, maxWordsPerPage, maxPageDurationMs } = input;
-
-  if (!tokens.length) {
-    return [];
-  }
-
+export function createCaptionPages(
+  tokens: CaptionToken[],
+  maxWordsPerPage: number,
+  maxPageDurationMs: number,
+): CaptionPage[] {
   const pages: CaptionPage[] = [];
-  let currentTokens: CaptionToken[] = [];
+  let current: CaptionToken[] = [];
 
   for (const token of tokens) {
-    if (currentTokens.length === 0) {
-      currentTokens.push(token);
-      continue;
+    const first = current[0];
+    const wouldExceedWords = current.length >= maxWordsPerPage;
+    const wouldExceedDuration = first
+      ? token.endMs - first.startMs > maxPageDurationMs
+      : false;
+    const previousEndsSentence = current.length > 0 && /[.!?]$/.test(current[current.length - 1]!.text.trim());
+
+    if (current.length > 0 && (wouldExceedWords || wouldExceedDuration || previousEndsSentence)) {
+      pages.push(tokensToPage(current, pages.length));
+      current = [];
     }
 
-    const pageStart = currentTokens[0]!.startMs;
-    const durationIfAdded = token.endMs - pageStart;
-
-    const wouldExceedDuration = durationIfAdded > maxPageDurationMs;
-    const wouldExceedWords = currentTokens.length >= maxWordsPerPage;
-    const prevEndsWithPunctuation = punctuationBreakPattern.test(
-      currentTokens[currentTokens.length - 1]!.text.trim(),
-    );
-
-    if ((wouldExceedDuration || wouldExceedWords || prevEndsWithPunctuation) && currentTokens.length > 0) {
-      pages.push(buildPage(currentTokens));
-      currentTokens = [token];
-    } else {
-      currentTokens.push(token);
-    }
+    current.push(token);
   }
 
-  if (currentTokens.length > 0) {
-    pages.push(buildPage(currentTokens));
+  if (current.length > 0) {
+    pages.push(tokensToPage(current, pages.length));
   }
 
   return pages;
 }
 
-function buildPage(tokens: CaptionToken[]): CaptionPage {
-  const first = tokens[0]!;
-  const last = tokens[tokens.length - 1]!;
+export function activeCaptionPage(pages: CaptionPage[], currentMs: number) {
+  return pages.find((page) => currentMs >= page.startMs && currentMs < page.endMs);
+}
 
+export function activeTokenIndex(page: CaptionPage | undefined, currentMs: number) {
+  if (!page) {
+    return -1;
+  }
+
+  return page.tokens.findIndex((token) => currentMs >= token.startMs && currentMs < token.endMs);
+}
+
+function tokensToPage(tokens: CaptionToken[], index: number): CaptionPage {
   return {
-    id: `page_${first.index}`,
-    startMs: first.startMs,
-    endMs: last.endMs,
+    id: `page_${index}`,
+    startMs: tokens[0]?.startMs || 0,
+    endMs: tokens[tokens.length - 1]?.endMs || 0,
     tokens,
   };
-}
-
-export function findActivePage(pages: CaptionPage[], currentTimeMs: number): CaptionPage | undefined {
-  return pages.find((page) => currentTimeMs >= page.startMs && currentTimeMs < page.endMs);
-}
-
-export function findActiveToken(
-  tokens: CaptionToken[],
-  currentTimeMs: number,
-): CaptionToken | undefined {
-  return tokens.find(
-    (token) => currentTimeMs >= token.startMs && currentTimeMs < token.endMs,
-  );
 }
