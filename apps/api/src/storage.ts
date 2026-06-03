@@ -2,7 +2,6 @@ import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import type {
-  CaptionJobState,
   ClipJson,
   JobState,
   CaptionJobState,
@@ -16,8 +15,6 @@ const rootDir = path.resolve(import.meta.dir, "../../..");
 export const storageRoot = path.join(rootDir, "storage");
 export const tmpRoot = path.join(storageRoot, "tmp");
 
-export const tmpRoot = path.join(storageRoot, "tmp", "caption-renders");
-
 export function videoPaths(videoId: string) {
   const baseDir = path.join(storageRoot, "videos", videoId);
   const clipsDir = path.join(baseDir, "clips");
@@ -25,8 +22,6 @@ export function videoPaths(videoId: string) {
   const captionJobsDir = path.join(baseDir, "caption-jobs");
   const reframesDir = path.join(baseDir, "reframes");
   const reframeJobsDir = path.join(baseDir, "reframe-jobs");
-  const captionsDir = path.join(baseDir, "captions");
-  const captionJobsDir = path.join(baseDir, "caption-jobs");
 
   return {
     baseDir,
@@ -35,8 +30,6 @@ export function videoPaths(videoId: string) {
     captionJobsDir,
     reframesDir,
     reframeJobsDir,
-    captionsDir,
-    captionJobsDir,
     originalVideo: path.join(baseDir, "original.mp4"),
     audio: path.join(baseDir, "audio.wav"),
     metadataJson: path.join(baseDir, "metadata.json"),
@@ -54,8 +47,6 @@ export async function ensureVideoDirs(videoId: string) {
     mkdir(paths.captionJobsDir, { recursive: true }),
     mkdir(paths.reframesDir, { recursive: true }),
     mkdir(paths.reframeJobsDir, { recursive: true }),
-    mkdir(paths.captionsDir, { recursive: true }),
-    mkdir(paths.captionJobsDir, { recursive: true }),
   ]);
   return paths;
 }
