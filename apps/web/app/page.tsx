@@ -17,6 +17,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  CaptionPreviewPlayer,
+  type CaptionSettings,
+} from "./caption-preview";
 
 type JobStatus =
   | "queued"
@@ -56,6 +60,13 @@ type TranscriptSegment = {
   speakerLabel?: string;
 };
 
+type TranscriptWord = {
+  word: string;
+  startMs: number;
+  endMs: number;
+  speakerLabel?: string;
+};
+
 type ClipResult = {
   id: string;
   title: string;
@@ -73,6 +84,11 @@ type ClipResult = {
   outputWidth?: number;
   outputHeight?: number;
   renderVersion?: string;
+  captionedMediaUrl?: string;
+  captionStyle?: CaptionSettings["style"];
+  captionEffect?: CaptionSettings["effect"];
+  captionPosition?: CaptionSettings["position"];
+  captionRenderVersion?: string;
 };
 
 type ProcessResult = {
@@ -87,6 +103,7 @@ type ProcessResult = {
   transcript: {
     text: string;
     segments: TranscriptSegment[];
+    words?: TranscriptWord[];
     durationMs?: number;
   };
   clips: ClipResult[];
@@ -106,6 +123,24 @@ type ReframeJobState = {
   jobId: string;
   videoId: string;
   status: ReframeJobStatus;
+  progress: number;
+  message: string;
+  error?: string;
+  result?: ProcessResult;
+};
+
+type CaptionJobStatus =
+  | "queued"
+  | "preparing"
+  | "rendering"
+  | "complete"
+  | "failed";
+
+type CaptionJobState = {
+  jobId: string;
+  videoId: string;
+  clipId: string;
+  status: CaptionJobStatus;
   progress: number;
   message: string;
   error?: string;
@@ -154,6 +189,7 @@ export default function Home() {
   const [videoId, setVideoId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
   const [reframeJob, setReframeJob] = useState<ReframeJobState | null>(null);
+  const [captionJob, setCaptionJob] = useState<CaptionJobState | null>(null);
   const [reframeJobs, setReframeJobs] = useState<ReframeJobSummary[]>([]);
   const [storedVideos, setStoredVideos] = useState<StoredVideoSummary[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -171,7 +207,12 @@ export default function Home() {
     reframeJob.status !== "complete" &&
     reframeJob.status !== "failed",
   );
-  const isBusy = isProcessing || isReframing;
+  const isCaptioning = Boolean(
+    captionJob &&
+    captionJob.status !== "complete" &&
+    captionJob.status !== "failed",
+  );
+  const isBusy = isProcessing || isReframing || isCaptioning;
 
   const originalVideoUrl = useMemo(
     () => absoluteApiUrl(job?.result?.originalVideoUrl),
@@ -294,6 +335,64 @@ export default function Home() {
       cancelled = true;
     };
   }, [reframeJob?.jobId]);
+
+  useEffect(() => {
+    if (!captionJob?.jobId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollCaption = async () => {
+      while (!cancelled) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/caption-jobs/${captionJob.jobId}/status`,
+          );
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.error || "Could not load caption status.");
+          }
+
+          setCaptionJob(payload);
+
+          if (payload.status === "complete") {
+            if (payload.result) {
+              setJob({
+                jobId: `cached_${payload.videoId}`,
+                videoId: payload.videoId,
+                status: "complete",
+                progress: 100,
+                message: "Processing complete.",
+                result: payload.result,
+              });
+            }
+            break;
+          }
+
+          if (payload.status === "failed") {
+            break;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        } catch (pollError) {
+          setError(
+            pollError instanceof Error
+              ? pollError.message
+              : "Caption polling failed.",
+          );
+          break;
+        }
+      }
+    };
+
+    void pollCaption();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [captionJob?.jobId]);
 
   async function loadStoredVideos() {
     setIsLoadingStoredVideos(true);
@@ -566,6 +665,51 @@ export default function Home() {
     }
   }
 
+  async function handleRenderCaptions(clip: ClipResult, settings: CaptionSettings) {
+    if (!job?.videoId) {
+      setError("Open a processed video before rendering captions.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/videos/${job.videoId}/clips/${clip.id}/captions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            renderVersion: clip.renderVersion,
+            ...settings,
+          }),
+        },
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not start caption render.");
+      }
+
+      setCaptionJob({
+        jobId: payload.jobId,
+        videoId: payload.videoId,
+        clipId: payload.clipId,
+        status: "queued",
+        progress: 1,
+        message: "Queued caption render.",
+      });
+    } catch (captionError) {
+      setError(
+        captionError instanceof Error
+          ? captionError.message
+          : "Caption render failed to start.",
+      );
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f7f2] text-zinc-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -642,7 +786,12 @@ export default function Home() {
               />
             ) : null}
 
-            <StatusPanel job={job} reframeJob={reframeJob} error={error} />
+            <StatusPanel
+              job={job}
+              reframeJob={reframeJob}
+              captionJob={captionJob}
+              error={error}
+            />
             <TranscriptPanel
               segments={job?.result?.transcript.segments || []}
               className=""
@@ -652,7 +801,10 @@ export default function Home() {
 
         <ClipsPanel
           clips={job?.result?.clips || []}
-          segments={job?.result?.transcript.segments || []}
+          transcript={job?.result?.transcript}
+          activeCaptionJob={captionJob}
+          isCaptioning={isCaptioning}
+          onRenderCaptions={handleRenderCaptions}
         />
       </div>
     </main>
@@ -931,14 +1083,20 @@ function StoredVideosPanel({
 function StatusPanel({
   job,
   reframeJob,
+  captionJob,
   error,
 }: {
   job: JobState | null;
   reframeJob: ReframeJobState | null;
+  captionJob: CaptionJobState | null;
   error: string | null;
 }) {
   const active =
-    reframeJob && reframeJob.status !== "complete" ? reframeJob : job;
+    captionJob && captionJob.status !== "complete"
+      ? captionJob
+      : reframeJob && reframeJob.status !== "complete"
+        ? reframeJob
+        : job;
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">

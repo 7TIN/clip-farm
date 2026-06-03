@@ -17,6 +17,10 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "hono": "^4.12.19"
+    "@remotion/bundler": "4.0.469",
+    "@remotion/media": "4.0.469",
+    "@remotion/renderer": "4.0.469",
+    "hono": "^4.12.19",
+    "remotion": "4.0.469"
   }
 }

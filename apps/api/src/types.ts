@@ -132,6 +132,50 @@ export type TranscriptWord = {
   speakerLabel?: string;
 };
 
+export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
+
+export type CaptionEffect = "none" | "magic";
+
+export type CaptionPosition = "top" | "center" | "bottom";
+
+export type CaptionSettings = {
+  style: CaptionStylePreset;
+  effect: CaptionEffect;
+  position: CaptionPosition;
+  maxWordsPerPage: number;
+  maxPageDurationMs: number;
+};
+
+export type CaptionToken = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  timestampMs: number;
+  confidence: number;
+};
+
+export type CaptionJobStatus =
+  | "queued"
+  | "preparing"
+  | "rendering"
+  | "complete"
+  | "failed";
+
+export type CaptionJobState = {
+  jobId: string;
+  videoId: string;
+  clipId: string;
+  renderVersion?: string;
+  status: CaptionJobStatus;
+  progress: number;
+  message: string;
+  settings: CaptionSettings;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+  result?: ProcessResult;
+};
+
 export type ClipJson = {
   id: string;
   videoId: string;
@@ -151,6 +195,12 @@ export type ClipJson = {
   outputWidth?: number;
   outputHeight?: number;
   renderVersion?: string;
+  captionedOutputPath?: string;
+  captionedMediaUrl?: string;
+  captionStyle?: CaptionStylePreset;
+  captionEffect?: CaptionEffect;
+  captionPosition?: CaptionPosition;
+  captionRenderVersion?: string;
 };
 
 export type ReframeJobSummary = {
