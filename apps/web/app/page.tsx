@@ -1413,14 +1413,21 @@ function TranscriptPanel({ segments, className = "" }: TranscriptPanelProps) {
 
 function ClipsPanel({
   clips,
-  segments,
+  transcript,
+  activeCaptionJob,
+  isCaptioning,
+  onRenderCaptions,
 }: {
   clips: ClipResult[];
-  segments: TranscriptSegment[];
+  transcript: { text: string; segments: TranscriptSegment[]; words?: TranscriptWord[] | undefined; durationMs?: number | undefined; } | undefined;
+  activeCaptionJob: CaptionJobState | null;
+  isCaptioning: boolean;
+  onRenderCaptions: (clip: ClipResult, settings: CaptionSettings) => Promise<void>;
 }) {
   const [expandedClipIds, setExpandedClipIds] = useState<Set<string>>(
     new Set(),
   );
+  const segments = transcript?.segments || [];
 
   function toggleClip(clipId: string) {
     setExpandedClipIds((current) => {
@@ -1455,12 +1462,16 @@ function ClipsPanel({
 
           return (
             <ClipCard
-              key={clip.id}
+              key={`${clip.id}-${clip.renderVersion || "base"}`}
               clip={clip}
               index={index}
               segments={clipSegments}
+              transcriptWords={transcript?.words || []}
+              activeCaptionJob={activeCaptionJob}
+              isCaptioning={isCaptioning}
               isExpanded={expandedClipIds.has(clip.id)}
               onToggle={() => toggleClip(clip.id)}
+              onRenderCaptions={onRenderCaptions}
             />
           );
         })}
@@ -1473,16 +1484,37 @@ function ClipCard({
   clip,
   index,
   segments,
+  transcriptWords,
+  activeCaptionJob,
+  isCaptioning,
   isExpanded,
   onToggle,
+  onRenderCaptions,
 }: {
   clip: ClipResult;
   index: number;
   segments: TranscriptSegment[];
+  transcriptWords: TranscriptWord[];
+  activeCaptionJob: CaptionJobState | null;
+  isCaptioning: boolean;
   isExpanded: boolean;
   onToggle: () => void;
+  onRenderCaptions: (clip: ClipResult, settings: CaptionSettings) => Promise<void>;
 }) {
   const mediaUrl = absoluteApiUrl(clip.mediaUrl);
+  const captionedMediaUrl = absoluteApiUrl(clip.captionedMediaUrl);
+  const [captionSettings, setCaptionSettings] = useState<CaptionSettings>({
+    style: clip.captionStyle || "hormozi",
+    effect: clip.captionEffect || "magic",
+    position: clip.captionPosition || "bottom",
+    maxWordsPerPage: 6,
+    maxPageDurationMs: 1800,
+  });
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const isThisCaptioning =
+    isCaptioning &&
+    activeCaptionJob?.clipId === clip.id &&
+    (!activeCaptionJob || activeCaptionJob.status !== "failed");
   const layoutClass =
     clip.aspectRatio === "9:16"
       ? "lg:grid-cols-[260px_1fr]"
@@ -1545,6 +1577,19 @@ function ClipCard({
         </div>
       </div>
 
+      <CaptionControls
+        clip={clip}
+        mediaUrl={mediaUrl}
+        captionedMediaUrl={captionedMediaUrl}
+        transcriptWords={transcriptWords}
+        settings={captionSettings}
+        isPreviewOpen={isPreviewOpen}
+        isRendering={isThisCaptioning}
+        onSettingsChange={setCaptionSettings}
+        onTogglePreview={() => setIsPreviewOpen((value) => !value)}
+        onRender={() => onRenderCaptions(clip, captionSettings)}
+      />
+
       <button
         type="button"
         onClick={onToggle}
@@ -1572,6 +1617,142 @@ function ClipCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function CaptionControls({
+  clip,
+  mediaUrl,
+  captionedMediaUrl,
+  transcriptWords,
+  settings,
+  isPreviewOpen,
+  isRendering,
+  onSettingsChange,
+  onTogglePreview,
+  onRender,
+}: {
+  clip: ClipResult;
+  mediaUrl?: string;
+  captionedMediaUrl?: string;
+  transcriptWords: TranscriptWord[];
+  settings: CaptionSettings;
+  isPreviewOpen: boolean;
+  isRendering: boolean;
+  onSettingsChange: (settings: CaptionSettings) => void;
+  onTogglePreview: () => void;
+  onRender: () => void;
+}) {
+  const previewSource = captionedMediaUrl || mediaUrl;
+  const canPreview = Boolean(mediaUrl && transcriptWords.length > 0);
+
+  return (
+    <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">Captions</p>
+          <p className="text-xs text-zinc-500">
+            {captionedMediaUrl ? "Captioned export is ready." : "Preview uses word timestamps from transcript JSON."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onTogglePreview}
+            disabled={!canPreview}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Film className="size-4" />
+            {isPreviewOpen ? "Hide preview" : "Caption preview"}
+          </button>
+          <button
+            type="button"
+            onClick={onRender}
+            disabled={!mediaUrl || isRendering}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isRendering ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Sparkles className="size-4" />
+            )}
+            Render captions
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+            Style
+          </span>
+          <select
+            value={settings.style}
+            onChange={(event) =>
+              onSettingsChange({
+                ...settings,
+                style: event.target.value as CaptionSettings["style"],
+              })
+            }
+            className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          >
+            <option value="hormozi">Hormozi</option>
+            <option value="basic">Basic</option>
+            <option value="bubbly">Bubbly</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+            Effect
+          </span>
+          <select
+            value={settings.effect}
+            onChange={(event) =>
+              onSettingsChange({
+                ...settings,
+                effect: event.target.value as CaptionSettings["effect"],
+              })
+            }
+            className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          >
+            <option value="magic">Magic</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-zinc-600">
+            Position
+          </span>
+          <select
+            value={settings.position}
+            onChange={(event) =>
+              onSettingsChange({
+                ...settings,
+                position: event.target.value as CaptionSettings["position"],
+              })
+            }
+            className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          >
+            <option value="bottom">Bottom</option>
+            <option value="center">Center</option>
+            <option value="top">Top</option>
+          </select>
+        </label>
+      </div>
+
+      {isPreviewOpen && previewSource ? (
+        <div className="mt-3 max-w-xs overflow-hidden rounded-md bg-black">
+          <CaptionPreviewPlayer
+            clipSrc={previewSource}
+            clip={clip}
+            words={transcriptWords}
+            settings={settings}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
