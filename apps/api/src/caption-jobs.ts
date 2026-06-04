@@ -89,8 +89,8 @@ async function processCaptionJob(job: CaptionJobState) {
     );
 
     await writeJsonFile(paths.clipsJson, updatedClips);
-    const mainJob = await writeMainJob(job.videoId, metadata, transcript, updatedClips);
-    await completeCaptionJob(job, mainJob);
+    await writeMainJob(job.videoId, metadata, transcript, updatedClips);
+    await completeCaptionJob(job, updatedClips);
   } catch (error) {
     await failCaptionJob(job, error);
   }
@@ -116,7 +116,7 @@ async function updateCaptionJob(
   });
 }
 
-async function completeCaptionJob(original: CaptionJobState, mainJob: JobState) {
+async function completeCaptionJob(original: CaptionJobState, clips: ClipJson[]) {
   const existing = await readCaptionJob(original.videoId, original.jobId);
   if (!existing) {
     return;
@@ -128,7 +128,7 @@ async function completeCaptionJob(original: CaptionJobState, mainJob: JobState) 
     progress: 100,
     message: "Caption render complete.",
     updatedAt: new Date().toISOString(),
-    result: mainJob.result,
+    result: { clips },
   });
 }
 

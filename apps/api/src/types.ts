@@ -161,6 +161,10 @@ export type CaptionJobStatus =
   | "complete"
   | "failed";
 
+export type CaptionJobResult = {
+  clips: ClipJson[];
+};
+
 export type CaptionJobState = {
   jobId: string;
   videoId: string;
@@ -173,7 +177,7 @@ export type CaptionJobState = {
   createdAt: string;
   updatedAt: string;
   error?: string;
-  result?: ProcessResult;
+  result?: CaptionJobResult;
 };
 
 export type ClipJson = {

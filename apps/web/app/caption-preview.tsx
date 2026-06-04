@@ -4,16 +4,17 @@ import { useMemo } from "react";
 import { Player } from "@remotion/player";
 import {
   AbsoluteFill,
-  Video,
+  // Video,
   interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { Video } from "@remotion/media";
 
-type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
-type CaptionEffect = "none" | "magic";
-type CaptionPosition = "top" | "center" | "bottom";
+export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
+export type CaptionEffect = "none" | "magic";
+export type CaptionPosition = "top" | "center" | "bottom";
 
 export type CaptionSettings = {
   style: CaptionStylePreset;
@@ -81,6 +82,7 @@ export function CaptionPreviewPlayer({
       compositionHeight={height}
       fps={fps}
       controls
+      acknowledgeRemotionLicense
       style={{ width: "100%", aspectRatio: `${width} / ${height}` }}
     />
   );

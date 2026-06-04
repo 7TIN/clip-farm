@@ -123,6 +123,16 @@ function serveFile(filePath: string): Promise<{ url: string; close: () => void }
   const { size } = statSync(filePath);
 
   function handleRequest(req: IncomingMessage, res: ServerResponse) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     const range = req.headers.range;
 
     if (range) {
