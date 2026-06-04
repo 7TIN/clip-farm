@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -260,7 +260,5 @@ export async function readJsonFile<T>(filePath: string): Promise<T | undefined> 
 
 export async function writeJsonFile(filePath: string, value: unknown) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp.${crypto.randomUUID()}`;
-  await Bun.write(tmpPath, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(tmpPath, filePath);
+  await Bun.write(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
