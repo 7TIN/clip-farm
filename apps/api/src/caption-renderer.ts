@@ -82,12 +82,15 @@ export async function renderCaptionedClip({
 
     await onProgress?.(25, "Rendering captioned video with Remotion.");
     await renderMedia({
+      imageFormat: "jpeg",
+      jpegQuality: 90,
       composition,
       serveUrl,
       codec: "h264",
       outputLocation: outputPath,
       inputProps,
-      concurrency: Math.max(1, Math.min(4, navigatorHardwareConcurrency())),
+      // concurrency: Math.max(1, Math.min(4, navigatorHardwareConcurrency())),
+      concurrency: 4,
       onProgress: ({ progress }) => {
         void onProgress?.(25 + Math.round(progress * 70), "Rendering captioned video.");
       },

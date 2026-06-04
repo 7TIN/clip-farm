@@ -1,14 +1,18 @@
 import React, { useMemo } from "react";
 import {
   AbsoluteFill,
-  Video,
   interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { activeCaptionPage, activeTokenIndex, createCaptionPages } from "./caption-pages";
+import {
+  activeCaptionPage,
+  activeTokenIndex,
+  createCaptionPages,
+} from "./caption-pages";
 import type { CaptionPage, CaptionedClipProps } from "./types";
+import { Video } from "@remotion/media";
 
 export function CaptionedClip({
   clipSrc,
@@ -59,16 +63,28 @@ function CaptionBox({
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const entrance = effect === "magic"
-    ? spring({ frame: frame % Math.round(fps * 2), fps, config: { damping: 16 } })
-    : 1;
-  const opacity = effect === "magic" ? interpolate(entrance, [0, 1], [0, 1]) : 1;
-  const scale = effect === "magic" ? interpolate(entrance, [0, 1], [0.88, 1]) : 1;
+  const entrance =
+    effect === "magic"
+      ? spring({
+          frame: frame % Math.round(fps * 2),
+          fps,
+          config: { damping: 16 },
+        })
+      : 1;
+  const opacity =
+    effect === "magic" ? interpolate(entrance, [0, 1], [0, 1]) : 1;
+  const scale =
+    effect === "magic" ? interpolate(entrance, [0, 1], [0.88, 1]) : 1;
 
   return (
-    <div style={{ ...boxStyle(styleName), opacity, transform: `scale(${scale})` }}>
+    <div
+      style={{ ...boxStyle(styleName), opacity, transform: `scale(${scale})` }}
+    >
       {page.tokens.map((token, index) => (
-        <span key={`${page.id}-${index}`} style={tokenStyle(styleName, index === activeIndex)}>
+        <span
+          key={`${page.id}-${index}`}
+          style={tokenStyle(styleName, index === activeIndex)}
+        >
           {token.text}
         </span>
       ))}
@@ -76,7 +92,9 @@ function CaptionBox({
   );
 }
 
-function positionStyle(position: CaptionedClipProps["position"]): React.CSSProperties {
+function positionStyle(
+  position: CaptionedClipProps["position"],
+): React.CSSProperties {
   const base: React.CSSProperties = {
     alignItems: "center",
     padding: "96px 72px",
@@ -128,7 +146,10 @@ function boxStyle(styleName: CaptionedClipProps["style"]): React.CSSProperties {
   return base;
 }
 
-function tokenStyle(styleName: CaptionedClipProps["style"], active: boolean): React.CSSProperties {
+function tokenStyle(
+  styleName: CaptionedClipProps["style"],
+  active: boolean,
+): React.CSSProperties {
   if (styleName === "hormozi") {
     return {
       color: active ? "#ffd400" : "white",
