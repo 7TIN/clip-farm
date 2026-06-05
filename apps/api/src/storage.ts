@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, rename } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -249,16 +249,30 @@ export async function readStoredVideoJob(videoId: string): Promise<JobState | un
 }
 
 export async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-  const file = Bun.file(filePath);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const file = Bun.file(filePath);
 
-  if (!(await file.exists())) {
-    return undefined;
+    if (!(await file.exists())) {
+      return undefined;
+    }
+
+    try {
+      return (await file.json()) as T;
+    } catch (error) {
+      if (!(error instanceof SyntaxError) || attempt === 2) {
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
 
-  return file.json() as Promise<T>;
+  return undefined;
 }
 
 export async function writeJsonFile(filePath: string, value: unknown) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await Bun.write(filePath, `${JSON.stringify(value, null, 2)}\n`);
+  const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  await Bun.write(tempPath, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(tempPath, filePath);
 }

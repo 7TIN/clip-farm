@@ -123,6 +123,19 @@ function serveFile(filePath: string): Promise<{ url: string; close: () => void }
   const { size } = statSync(filePath);
 
   function handleRequest(req: IncomingMessage, res: ServerResponse) {
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+    };
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, corsHeaders);
+      res.end();
+      return;
+    }
+
     const range = req.headers.range;
 
     if (range) {
@@ -131,6 +144,7 @@ function serveFile(filePath: string): Promise<{ url: string; close: () => void }
         const start = Number(match[1]);
         const end = match[2] ? Number(match[2]) : size - 1;
         res.writeHead(206, {
+          ...corsHeaders,
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
           "Content-Type": "video/mp4",
@@ -142,6 +156,7 @@ function serveFile(filePath: string): Promise<{ url: string; close: () => void }
     }
 
     res.writeHead(200, {
+      ...corsHeaders,
       "Content-Type": "video/mp4",
       "Accept-Ranges": "bytes",
       "Content-Length": size,

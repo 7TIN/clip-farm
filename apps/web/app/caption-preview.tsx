@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { Player } from "@remotion/player";
 import {
   AbsoluteFill,
-  // Video,
   interpolate,
   spring,
   useCurrentFrame,
@@ -12,9 +11,9 @@ import {
 } from "remotion";
 import { Video } from "@remotion/media";
 
-export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
-export type CaptionEffect = "none" | "magic";
-export type CaptionPosition = "top" | "center" | "bottom";
+type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
+type CaptionEffect = "none" | "magic";
+type CaptionPosition = "top" | "center" | "bottom";
 
 export type CaptionSettings = {
   style: CaptionStylePreset;
