@@ -1643,7 +1643,7 @@ function CaptionControls({
   onTogglePreview: () => void;
   onRender: () => void;
 }) {
-  const previewSource = captionedMediaUrl || mediaUrl;
+  const previewSource = mediaUrl;
   const canPreview = Boolean(mediaUrl && transcriptWords.length > 0);
 
   return (

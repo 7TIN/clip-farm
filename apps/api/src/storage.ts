@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename } from "node:fs/promises";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -106,27 +106,39 @@ export async function saveJob(job: JobState) {
 
 export async function readReframeJob(videoId: string, jobId: string) {
   const paths = videoPaths(videoId);
-  return readJsonFile<ReframeJobState>(path.join(paths.reframeJobsDir, `${jobId}.json`));
+  return readJsonFile<ReframeJobState>(
+    path.join(paths.reframeJobsDir, `${jobId}.json`),
+  );
 }
 
 export async function saveReframeJob(job: ReframeJobState) {
   const paths = await ensureVideoDirs(job.videoId);
-  await writeJsonFile(path.join(paths.reframeJobsDir, `${job.jobId}.json`), job);
+  await writeJsonFile(
+    path.join(paths.reframeJobsDir, `${job.jobId}.json`),
+    job,
+  );
 }
 
 export async function readCaptionJob(videoId: string, jobId: string) {
   const paths = videoPaths(videoId);
-  return readJsonFile<CaptionJobState>(path.join(paths.captionJobsDir, `${jobId}.json`));
+  return readJsonFile<CaptionJobState>(
+    path.join(paths.captionJobsDir, `${jobId}.json`),
+  );
 }
 
 export async function saveCaptionJob(job: CaptionJobState) {
   const paths = await ensureVideoDirs(job.videoId);
-  await writeJsonFile(path.join(paths.captionJobsDir, `${job.jobId}.json`), job);
+  await writeJsonFile(
+    path.join(paths.captionJobsDir, `${job.jobId}.json`),
+    job,
+  );
 }
 
 export async function findReframeJob(jobId: string) {
   const videosRoot = path.join(storageRoot, "videos");
-  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(
+    () => [],
+  );
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
@@ -144,7 +156,9 @@ export async function findReframeJob(jobId: string) {
 
 export async function findCaptionJob(jobId: string) {
   const videosRoot = path.join(storageRoot, "videos");
-  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(
+    () => [],
+  );
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
@@ -160,21 +174,31 @@ export async function findCaptionJob(jobId: string) {
   return undefined;
 }
 
-export async function getClipById(videoId: string, clipId: string, renderVersion?: string) {
+export async function getClipById(
+  videoId: string,
+  clipId: string,
+  renderVersion?: string,
+) {
   const paths = videoPaths(videoId);
   const clips = await readJsonFile<ClipJson[]>(paths.clipsJson);
 
   if (renderVersion) {
-    return clips?.find((clip) => clip.id === clipId && clip.renderVersion === renderVersion);
+    return clips?.find(
+      (clip) => clip.id === clipId && clip.renderVersion === renderVersion,
+    );
   }
 
-  return clips?.find((clip) => clip.id === clipId && !clip.renderVersion)
-    || clips?.find((clip) => clip.id === clipId);
+  return (
+    clips?.find((clip) => clip.id === clipId && !clip.renderVersion) ||
+    clips?.find((clip) => clip.id === clipId)
+  );
 }
 
 export async function listStoredVideos(): Promise<StoredVideoSummary[]> {
   const videosRoot = path.join(storageRoot, "videos");
-  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(videosRoot, { withFileTypes: true }).catch(
+    () => [],
+  );
   const summaries = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory())
@@ -205,11 +229,15 @@ export async function listStoredVideos(): Promise<StoredVideoSummary[]> {
   return summaries.sort((a, b) => {
     const aTime = Date.parse(a.updatedAt || a.createdAt || "");
     const bTime = Date.parse(b.updatedAt || b.createdAt || "");
-    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+    return (
+      (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+    );
   });
 }
 
-export async function readStoredVideoJob(videoId: string): Promise<JobState | undefined> {
+export async function readStoredVideoJob(
+  videoId: string,
+): Promise<JobState | undefined> {
   const paths = videoPaths(videoId);
   const [metadata, job, transcript, clips] = await Promise.all([
     readJsonFile<VideoMetadata>(paths.metadataJson),
@@ -233,7 +261,10 @@ export async function readStoredVideoJob(videoId: string): Promise<JobState | un
     videoId,
     status: job?.status || (transcript && clips ? "complete" : "failed"),
     progress: job?.progress || (transcript && clips ? 100 : 0),
-    message: transcript && clips ? "Loaded from local development storage." : "Cached video is incomplete.",
+    message:
+      transcript && clips
+        ? "Loaded from local development storage."
+        : "Cached video is incomplete.",
     createdAt: job?.createdAt || metadata?.createdAt || now,
     updatedAt: job?.updatedAt || now,
     error: job?.error,
@@ -248,7 +279,9 @@ export async function readStoredVideoJob(videoId: string): Promise<JobState | un
   };
 }
 
-export async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
+export async function readJsonFile<T>(
+  filePath: string,
+): Promise<T | undefined> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const file = Bun.file(filePath);
 
@@ -259,11 +292,15 @@ export async function readJsonFile<T>(filePath: string): Promise<T | undefined> 
     try {
       return (await file.json()) as T;
     } catch (error) {
-      if (!(error instanceof SyntaxError) || attempt === 2) {
-        throw error;
-      }
+      console.error("JSON PARSE FAILED");
+      console.error("FILE:", filePath);
 
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      const text = await file.text();
+
+      console.error("SIZE:", text.length);
+      console.error("CONTENT:", text.slice(0, 200));
+
+      throw error;
     }
   }
 
@@ -274,5 +311,9 @@ export async function writeJsonFile(filePath: string, value: unknown) {
   await mkdir(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
   await Bun.write(tempPath, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(tempPath, filePath);
+  try {
+  await rm(filePath, { force: true });
+} catch {}
+
+await rename(tempPath, filePath);
 }
