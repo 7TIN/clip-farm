@@ -245,11 +245,7 @@ export default function Home() {
 
         setJob(payload);
       } catch (pollError) {
-        setError(
-          pollError instanceof Error
-            ? pollError.message
-            : "Status polling failed.",
-        );
+        console.error("Status polling error (retrying):", pollError);
       }
     };
 
@@ -316,15 +312,8 @@ export default function Home() {
 
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         } catch (pollError) {
-          console.error(pollError);
-
-          setError(
-            pollError instanceof Error
-              ? pollError.message
-              : "Reframe polling failed.",
-          );
-
-          break;
+          console.error("Reframe polling error (retrying):", pollError);
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         }
       }
     };
@@ -349,7 +338,14 @@ export default function Home() {
           const response = await fetch(
             `${API_BASE_URL}/caption-jobs/${captionJob.jobId}/status`,
           );
-          const payload = await response.json();
+
+          const text = await response.text();
+          let payload;
+          try {
+            payload = text ? JSON.parse(text) : {};
+          } catch {
+            throw new Error("Server returned invalid JSON.");
+          }
 
           if (!response.ok) {
             throw new Error(payload.error || "Could not load caption status.");
@@ -377,12 +373,8 @@ export default function Home() {
 
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         } catch (pollError) {
-          setError(
-            pollError instanceof Error
-              ? pollError.message
-              : "Caption polling failed.",
-          );
-          break;
+          console.error("Caption polling error (retrying):", pollError);
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         }
       }
     };
@@ -793,7 +785,7 @@ export default function Home() {
               error={error}
             />
             <TranscriptPanel
-              segments={job?.result?.transcript.segments || []}
+              segments={job?.result?.transcript?.segments || []}
               className=""
             />
           </div>

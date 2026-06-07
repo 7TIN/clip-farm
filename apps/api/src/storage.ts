@@ -282,29 +282,37 @@ export async function readStoredVideoJob(
 export async function readJsonFile<T>(
   filePath: string,
 ): Promise<T | undefined> {
-  const file = Bun.file(filePath);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const file = Bun.file(filePath);
 
-  if (!(await file.exists())) {
-    return undefined;
-  }
+    if (!(await file.exists())) {
+      if (attempt < 9) {
+        await delay(50);
+        continue;
+      }
+      return undefined;
+    }
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return (await file.json()) as T;
     } catch (error) {
+      if (attempt < 9) {
+        await delay(50);
+        continue;
+      }
+
       console.error("JSON PARSE FAILED");
       console.error("FILE:", filePath);
 
-      const text = await file.text();
-
-      console.error("SIZE:", text.length);
-      console.error("CONTENT:", text.slice(0, 200));
-
-      if (attempt === 2) {
-        throw error;
+      try {
+        const text = await file.text();
+        console.error("SIZE:", text.length);
+        console.error("CONTENT:", text.slice(0, 200));
+      } catch (readErr) {
+        console.error("Could not read file for debug:", readErr);
       }
 
-      await delay(25);
+      return undefined;
     }
   }
 
@@ -354,11 +362,15 @@ export async function writeJsonFile(filePath: string, value: unknown) {
           if (attempt >= 5 || !isRetryableRenameError(error)) {
             throw error;
           }
-          await delay(attempt * 25);
+          await delay(attempt * 50);
         }
       }
     } finally {
-      await rm(tempPath, { force: true });
+      try {
+        await rm(tempPath, { force: true });
+      } catch {
+        // Cleanup failure is non-fatal
+      }
     }
   });
 }

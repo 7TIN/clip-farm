@@ -96,12 +96,37 @@ async function processCaptionJob(job: CaptionJobState) {
   }
 }
 
+const progressThrottleMap = new Map<string, { lastUpdate: number; lastProgress: number }>();
+
 async function updateCaptionJob(
   original: CaptionJobState,
   status: CaptionJobStatus,
   progress: number,
   message: string,
 ) {
+  const now = Date.now();
+  const throttleKey = `${original.videoId}:${original.jobId}`;
+  const throttle = progressThrottleMap.get(throttleKey) || { lastUpdate: 0, lastProgress: 0 };
+
+  const normalizedProgress = Math.min(99, Math.max(1, progress));
+  const isCompletion = normalizedProgress === 99 || normalizedProgress === 100;
+  const isStatusChange = status !== original.status;
+  const timeSinceLastUpdate = now - throttle.lastUpdate;
+  const shouldUpdate =
+    isCompletion ||
+    isStatusChange ||
+    timeSinceLastUpdate > 1000 ||
+    normalizedProgress > throttle.lastProgress + 10;
+
+  if (!shouldUpdate) {
+    return;
+  }
+
+  progressThrottleMap.set(throttleKey, {
+    lastUpdate: now,
+    lastProgress: normalizedProgress,
+  });
+
   const existing = await readCaptionJob(original.videoId, original.jobId);
   if (!existing) {
     return;
@@ -110,7 +135,7 @@ async function updateCaptionJob(
   await saveCaptionJob({
     ...existing,
     status,
-    progress: Math.min(99, Math.max(1, progress)),
+    progress: normalizedProgress,
     message,
     updatedAt: new Date().toISOString(),
   });
