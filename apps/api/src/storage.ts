@@ -282,13 +282,13 @@ export async function readStoredVideoJob(
 export async function readJsonFile<T>(
   filePath: string,
 ): Promise<T | undefined> {
+  const file = Bun.file(filePath);
+
+  if (!(await file.exists())) {
+    return undefined;
+  }
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const file = Bun.file(filePath);
-
-    if (!(await file.exists())) {
-      return undefined;
-    }
-
     try {
       return (await file.json()) as T;
     } catch (error) {
@@ -300,20 +300,65 @@ export async function readJsonFile<T>(
       console.error("SIZE:", text.length);
       console.error("CONTENT:", text.slice(0, 200));
 
-      throw error;
+      if (attempt === 2) {
+        throw error;
+      }
+
+      await delay(25);
     }
   }
 
   return undefined;
 }
 
+const writeJsonFileQueue = new Map<string, Promise<void>>();
+
+async function serializeWrite(filePath: string, fn: () => Promise<void>) {
+  const previous = writeJsonFileQueue.get(filePath) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  writeJsonFileQueue.set(filePath, next);
+
+  try {
+    return await next;
+  } finally {
+    if (writeJsonFileQueue.get(filePath) === next) {
+      writeJsonFileQueue.delete(filePath);
+    }
+  }
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableRenameError(error: unknown) {
+  const code = (error as { code?: string })?.code;
+  return code === "EPERM" || code === "ENOENT";
+}
+
 export async function writeJsonFile(filePath: string, value: unknown) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
-  await Bun.write(tempPath, `${JSON.stringify(value, null, 2)}\n`);
-  try {
-  await rm(filePath, { force: true });
-} catch {}
 
-await rename(tempPath, filePath);
+  await serializeWrite(filePath, async () => {
+    const tempPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+    const content = `${JSON.stringify(value, null, 2)}\n`;
+    await Bun.write(tempPath, content);
+
+    try {
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await rm(filePath, { force: true });
+          await rename(tempPath, filePath);
+          return;
+        } catch (error) {
+          if (attempt >= 5 || !isRetryableRenameError(error)) {
+            throw error;
+          }
+          await delay(attempt * 25);
+        }
+      }
+    } finally {
+      await rm(tempPath, { force: true });
+    }
+  });
 }

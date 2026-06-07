@@ -91,9 +91,8 @@ export async function renderCaptionedClip({
       inputProps,
       // concurrency: Math.max(1, Math.min(4, navigatorHardwareConcurrency())),
       concurrency: 4,
-      onProgress: ({ progress }) => {
-        void onProgress?.(25 + Math.round(progress * 70), "Rendering captioned video.");
-      },
+      onProgress: ({ progress }) =>
+        onProgress?.(25 + Math.round(progress * 70), "Rendering captioned video."),
     });
 
     return {
