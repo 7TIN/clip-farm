@@ -1,10 +1,10 @@
 import path from "node:path";
 
-import { renderClip } from "./ffmpeg";
-import { settingsSlug } from "./reframe-settings";
+import { renderClip } from "../lib/ffmpeg";
+import { settingsSlug } from "../config/reframe-settings";
 import { analyzeSmartCrop } from "./smart-reframe";
-import { videoPaths, writeJsonFile } from "./storage";
-import type { ClipJson, ReframeSettings, SmartCropMetadata } from "./types";
+import { videoPaths, writeJsonFile } from "../lib/storage";
+import type { ClipJson, ReframeSettings, SmartCropMetadata } from "../types";
 
 type RenderProgress = (index: number, total: number, clip: ClipJson) => Promise<void> | void;
 

@@ -3,7 +3,7 @@ import type {
   TranscriptJson,
   TranscriptSegment,
   TranscriptWord,
-} from "./types";
+} from "../types";
 
 export async function transcribeAudio(audioPath: string, videoId: string, language: string) {
   const apiKey = process.env.SMALLEST_API_KEY;

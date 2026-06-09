@@ -7,7 +7,7 @@ import {
   saveReframeJob,
   videoPaths,
   writeJsonFile,
-} from "./storage";
+} from "../lib/storage";
 import { renderClipsForVideo } from "./clip-renderer";
 import type {
   ClipJson,
@@ -17,7 +17,7 @@ import type {
   ReframeSettings,
   TranscriptJson,
   VideoMetadata,
-} from "./types";
+} from "../types";
 
 export async function startReframeJob(videoId: string, settings: ReframeSettings) {
   const now = new Date().toISOString();

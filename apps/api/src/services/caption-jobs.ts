@@ -7,7 +7,7 @@ import {
   saveJob,
   videoPaths,
   writeJsonFile,
-} from "./storage";
+} from "../lib/storage";
 import type {
   CaptionJobState,
   CaptionJobStatus,
@@ -16,7 +16,7 @@ import type {
   JobState,
   TranscriptJson,
   VideoMetadata,
-} from "./types";
+} from "../types";
 
 export async function startCaptionJob(
   videoId: string,

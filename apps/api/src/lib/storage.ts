@@ -9,7 +9,7 @@ import type {
   StoredVideoSummary,
   TranscriptJson,
   VideoMetadata,
-} from "./types";
+} from "../types";
 
 const rootDir = path.resolve(import.meta.dir, "../../..");
 export const storageRoot = path.join(rootDir, "storage");

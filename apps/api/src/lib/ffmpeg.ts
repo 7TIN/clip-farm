@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { ClipJson, ReframeSettings, SmartCropMetadata, VideoMetadata } from "./types";
+import type { ClipJson, ReframeSettings, SmartCropMetadata, VideoMetadata } from "../types";
 
 type FfprobeOutput = {
   streams?: Array<{

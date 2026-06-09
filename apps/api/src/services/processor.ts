@@ -1,7 +1,7 @@
 import { createRandomClips } from "./clips";
 import { renderClipsForVideo } from "./clip-renderer";
-import { extractAudio, readVideoDetails } from "./ffmpeg";
-import { defaultReframeSettings } from "./reframe-settings";
+import { extractAudio, readVideoDetails } from "../lib/ffmpeg";
+import { defaultReframeSettings } from "../config/reframe-settings";
 import {
   readJob,
   readVideoMetadata,
@@ -9,7 +9,7 @@ import {
   saveVideoMetadata,
   videoPaths,
   writeJsonFile,
-} from "./storage";
+} from "../lib/storage";
 import { transcribeAudio } from "./transcription";
 import type {
   ClipJson,
@@ -18,7 +18,7 @@ import type {
   ReframeSettings,
   TranscriptJson,
   VideoMetadata,
-} from "./types";
+} from "../types";
 
 type ProcessingOptions = {
   language: string;

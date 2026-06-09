@@ -1,4 +1,4 @@
-import type { CaptionEffect, CaptionPosition, CaptionStylePreset } from "../../types";
+import type { CaptionEffect, CaptionPosition, CaptionStylePreset } from "../../../types";
 
 export type CaptionToken = {
   text: string;

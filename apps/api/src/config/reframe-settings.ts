@@ -4,7 +4,7 @@ import type {
   ReframeMode,
   ReframeSettings,
   SmartReframeLayout,
-} from "./types";
+} from "../types";
 
 const dimensionsByRatio: Record<AspectRatio, { width: number; height: number }> = {
   "16:9": { width: 1920, height: 1080 },

@@ -1,4 +1,4 @@
-import type { CaptionToken, ClipJson, TranscriptJson, TranscriptSegment } from "./types";
+import type { CaptionToken, ClipJson, TranscriptJson, TranscriptSegment } from "../types";
 
 export function wordsForClip(transcript: TranscriptJson, clip: ClipJson): CaptionToken[] {
   const wordTokens = transcript.words

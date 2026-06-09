@@ -1,4 +1,4 @@
-import type { ClipJson, TranscriptJson, TranscriptSegment } from "./types";
+import type { ClipJson, TranscriptJson, TranscriptSegment } from "../types";
 
 const MIN_CLIP_MS = 30_000;
 const MAX_CLIP_MS = 40_000;
