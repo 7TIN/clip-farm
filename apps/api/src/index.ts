@@ -12,17 +12,18 @@ import {
   readJsonFile,
   readStoredVideoJob,
   videoPaths,
-} from "./storage";
-import { startProcessing } from "./processor";
-import { startCaptionJob } from "./caption-jobs";
+} from "./lib/storage";
+import { startProcessing } from "./services/processor";
+import { startCaptionJob } from "./services/caption-jobs";
 import {
   deleteReframeVariant,
   listReframeJobs,
   repairMissingClipFiles,
-} from "./reframe-maintenance";
-import { resolveCaptionSettings } from "./caption-settings";
-import { resolveReframeSettings } from "./reframe-settings";
-import { startReframeJob } from "./reframe";
+} from "./services/reframe-maintenance";
+import { resolveCaptionSettings } from "./config/caption-settings";
+import { resolveReframeSettings } from "./config/reframe-settings";
+import { startReframeJob } from "./services/reframe";
+
 import type {
   CaptionJobState,
   ClipJson,

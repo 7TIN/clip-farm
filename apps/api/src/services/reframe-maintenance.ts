@@ -2,15 +2,15 @@ import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { renderClipsForVideo } from "./clip-renderer";
-import { renderClip } from "./ffmpeg";
-import { resolveReframeSettings, settingsSlug } from "./reframe-settings";
+import { renderClip } from "../lib/ffmpeg";
+import { resolveReframeSettings, settingsSlug } from "../config/reframe-settings";
 import {
   readJob,
   readJsonFile,
   saveJob,
   videoPaths,
   writeJsonFile,
-} from "./storage";
+} from "../lib/storage";
 import type {
   ClipJson,
   JobState,
@@ -19,7 +19,7 @@ import type {
   ReframeSettings,
   TranscriptJson,
   VideoMetadata,
-} from "./types";
+} from "../types";
 
 export async function listReframeJobs(videoId: string): Promise<ReframeJobSummary[]> {
   const paths = videoPaths(videoId);

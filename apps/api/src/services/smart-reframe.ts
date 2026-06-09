@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { ReframeSettings, SmartCropMetadata } from "./types";
+import type { ReframeSettings, SmartCropMetadata } from "../types";
 
 type PythonSmartCropResponse = {
   layout?: "single" | "split";

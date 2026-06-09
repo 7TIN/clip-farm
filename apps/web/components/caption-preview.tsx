@@ -10,24 +10,8 @@ import {
   useVideoConfig,
 } from "remotion";
 import { Video } from "@remotion/media";
-
-type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
-type CaptionEffect = "none" | "magic";
-type CaptionPosition = "top" | "center" | "bottom";
-
-export type CaptionSettings = {
-  style: CaptionStylePreset;
-  effect: CaptionEffect;
-  position: CaptionPosition;
-  maxWordsPerPage: number;
-  maxPageDurationMs: number;
-};
-
-type TranscriptWord = {
-  word: string;
-  startMs: number;
-  endMs: number;
-};
+import type { CaptionStylePreset, CaptionEffect, CaptionPosition, CaptionSettings, TranscriptWord } from "@/lib/types";
+export type { CaptionSettings };
 
 type ClipPreview = {
   startMs: number;

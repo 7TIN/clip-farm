@@ -8,11 +8,11 @@ import type { AddressInfo } from "node:net";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 
-import { captionSettingsSlug } from "./caption-settings";
+import { captionSettingsSlug } from "../config/caption-settings";
 import { wordsForClip } from "./caption-words";
-import { readClipMediaDetails } from "./ffmpeg";
-import { videoPaths } from "./storage";
-import type { CaptionSettings, ClipJson, TranscriptJson } from "./types";
+import { readClipMediaDetails } from "../lib/ffmpeg";
+import { videoPaths } from "../lib/storage";
+import type { CaptionSettings, ClipJson, TranscriptJson } from "../types";
 
 type RenderProgress = (progress: number, message: string) => Promise<void> | void;
 

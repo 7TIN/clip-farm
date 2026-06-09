@@ -3,7 +3,7 @@ import type {
   CaptionPosition,
   CaptionSettings,
   CaptionStylePreset,
-} from "./types";
+} from "../types";
 
 const styles: CaptionStylePreset[] = ["basic", "hormozi", "bubbly"];
 const effects: CaptionEffect[] = ["none", "magic"];
