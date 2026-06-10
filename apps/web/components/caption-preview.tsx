@@ -134,7 +134,6 @@ function CaptionedClip({
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
-      <TextBehind textBehind={resolvedTextBehind} />
       <Video src={clipSrc} />
       <AbsoluteFill style={positionStyle(position)}>
         {page ? (
@@ -146,6 +145,7 @@ function CaptionedClip({
           />
         ) : null}
       </AbsoluteFill>
+      <TextBehind textBehind={resolvedTextBehind} />
     </AbsoluteFill>
   );
 }
