@@ -13,6 +13,8 @@ import {
 } from "./caption-pages";
 import type { CaptionPage, CaptionedClipProps } from "./types";
 import { Video } from "@remotion/media";
+import { TextBehind } from "./TextBehind";
+import { pickTextBehindWords } from "./text-behind-words";
 
 export function CaptionedClip({
   clipSrc,
@@ -22,9 +24,10 @@ export function CaptionedClip({
   position,
   maxWordsPerPage,
   maxPageDurationMs,
+  textBehind,
 }: CaptionedClipProps) {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const currentMs = (frame / fps) * 1000;
   const pages = useMemo(
     () => createCaptionPages(captions, maxWordsPerPage, maxPageDurationMs),
@@ -33,8 +36,19 @@ export function CaptionedClip({
   const page = activeCaptionPage(pages, currentMs);
   const activeIndex = activeTokenIndex(page, currentMs);
 
+  const resolvedTextBehind = useMemo(() => {
+    if (!textBehind.enabled) return textBehind;
+    if (textBehind.words.length > 0) return textBehind;
+    const durMs = (durationInFrames / fps) * 1000;
+    return {
+      ...textBehind,
+      words: pickTextBehindWords(captions, durMs, 2),
+    };
+  }, [textBehind, captions, durationInFrames, fps]);
+
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
+      <TextBehind textBehind={resolvedTextBehind} />
       <Video src={clipSrc} />
       <AbsoluteFill style={positionStyle(position)}>
         {page ? (

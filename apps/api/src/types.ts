@@ -138,12 +138,26 @@ export type CaptionEffect = "none" | "magic";
 
 export type CaptionPosition = "top" | "center" | "bottom";
 
+export type TextBehindSettings = {
+  enabled: boolean;
+  color: string;
+  fontFamily: string;
+  words: TextBehindWord[];
+};
+
+export type TextBehindWord = {
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
 export type CaptionSettings = {
   style: CaptionStylePreset;
   effect: CaptionEffect;
   position: CaptionPosition;
   maxWordsPerPage: number;
   maxPageDurationMs: number;
+  textBehind: TextBehindSettings;
 };
 
 export type CaptionToken = {

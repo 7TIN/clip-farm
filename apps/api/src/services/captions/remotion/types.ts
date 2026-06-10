@@ -1,4 +1,4 @@
-import type { CaptionEffect, CaptionPosition, CaptionStylePreset } from "../../../types";
+import type { CaptionEffect, CaptionPosition, CaptionStylePreset, TextBehindSettings } from "../../../types";
 
 export type CaptionToken = {
   text: string;
@@ -16,6 +16,7 @@ export type CaptionedClipProps = {
   position: CaptionPosition;
   maxWordsPerPage: number;
   maxPageDurationMs: number;
+  textBehind: TextBehindSettings;
   width: number;
   height: number;
   fps: number;

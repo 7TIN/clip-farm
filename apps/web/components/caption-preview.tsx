@@ -11,6 +11,7 @@ import {
 } from "remotion";
 import { Video } from "@remotion/media";
 import type { CaptionStylePreset, CaptionEffect, CaptionPosition, CaptionSettings, TranscriptWord } from "@/lib/types";
+import { TextBehind } from "./text-behind";
 export type { CaptionSettings };
 
 type ClipPreview = {
@@ -71,6 +72,33 @@ export function CaptionPreviewPlayer({
   );
 }
 
+function pickTextBehindWords(
+  captions: CaptionToken[],
+  durationMs: number,
+  count: number = 2,
+): { text: string; startMs: number; endMs: number }[] {
+  const unique = captions.filter(
+    (c, i, arr) => arr.findIndex((x) => x.text.trim() === c.text.trim()) === i,
+  );
+  const words = unique.filter((c) => c.text.trim().length > 1);
+  if (words.length === 0) return [];
+  const shuffled = [...words].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, Math.min(count, words.length));
+  const minGap = durationMs / (count + 1);
+
+  return selected.map((word, index) => {
+    const centerMs = minGap * (index + 1);
+    const halfDuration = Math.min(800, durationMs * 0.1);
+    const startMs = Math.max(0, centerMs - halfDuration / 2);
+    const endMs = Math.min(durationMs, centerMs + halfDuration / 2);
+    return {
+      text: word.text.trim(),
+      startMs: Math.round(startMs),
+      endMs: Math.round(endMs),
+    };
+  });
+}
+
 function CaptionedClip({
   clipSrc,
   captions,
@@ -79,12 +107,13 @@ function CaptionedClip({
   position,
   maxWordsPerPage,
   maxPageDurationMs,
+  textBehind,
 }: {
   clipSrc: string;
   captions: CaptionToken[];
 } & CaptionSettings) {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const currentMs = (frame / fps) * 1000;
   const pages = useMemo(
     () => createCaptionPages(captions, maxWordsPerPage, maxPageDurationMs),
@@ -93,8 +122,19 @@ function CaptionedClip({
   const page = pages.find((item) => currentMs >= item.startMs && currentMs < item.endMs);
   const activeIndex = page?.tokens.findIndex((token) => currentMs >= token.startMs && currentMs < token.endMs) ?? -1;
 
+  const resolvedTextBehind = useMemo(() => {
+    if (!textBehind.enabled) return textBehind;
+    if (textBehind.words.length > 0) return textBehind;
+    const durMs = (durationInFrames / fps) * 1000;
+    return {
+      ...textBehind,
+      words: pickTextBehindWords(captions, durMs, 2),
+    };
+  }, [textBehind, captions, durationInFrames, fps]);
+
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
+      <TextBehind textBehind={resolvedTextBehind} />
       <Video src={clipSrc} />
       <AbsoluteFill style={positionStyle(position)}>
         {page ? (
