@@ -7,6 +7,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import type { TextBehindSettings, TextBehindWord } from "../../../types";
+import { resolveFontFamily } from "./fonts";
 
 function activeWord(
   words: TextBehindWord[],
@@ -66,7 +67,7 @@ export function TextBehind({
     >
       <div
         style={{
-          fontFamily: textBehind.fontFamily,
+          fontFamily: resolveFontFamily(textBehind.fontFamily),
           fontSize: 140,
           fontWeight: 900,
           color: textBehind.color,
