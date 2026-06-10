@@ -68,6 +68,7 @@ export async function renderCaptionedClip({
       position: settings.position,
       maxWordsPerPage: settings.maxWordsPerPage,
       maxPageDurationMs: settings.maxPageDurationMs,
+      textBehind: settings.textBehind,
       width: media.width,
       height: media.height,
       fps: media.fps,
