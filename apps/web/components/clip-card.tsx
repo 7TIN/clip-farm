@@ -64,10 +64,10 @@ export function ClipCard({
       </div>
 
       <div className={`grid gap-4 ${layoutClass}`}>
-        <div className="w-fit">
+        <div>
           {mediaUrl && isPreviewOpen ? (
             <div
-              className={`overflow-hidden rounded-md bg-black ${clip.aspectRatio === "9:16" ? "max-w-60" : ""} ${clip.aspectRatio === "4:5" ? "max-w-sm" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}
+              className={`overflow-hidden w-full rounded-md bg-black ${clip.aspectRatio === "9:16" ? "max-w-60 aspect-[9/16]" : ""} ${clip.aspectRatio === "4:5" ? "max-w-sm aspect-[4/5]" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120 aspect-square" : ""} ${clip.aspectRatio === "16:9" ? "aspect-video" : ""}`}
             >
               <CaptionPreviewPlayer
                 clipSrc={mediaUrl}
