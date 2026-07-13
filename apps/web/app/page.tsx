@@ -558,9 +558,9 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f7f2] text-zinc-950">
+    <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 border-b border-zinc-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-medium text-emerald-700">
               Clip Farm MVP
@@ -569,7 +569,7 @@ export default function Home() {
               Video to transcript clips
             </h1>
           </div>
-          <div className="flex items-center gap-2 text-sm text-zinc-600">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {isBusy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (

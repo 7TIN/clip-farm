@@ -72,10 +72,11 @@ export function CaptionControls({
   captionedMediaUrl,
   transcriptWords,
   settings,
-  isPreviewOpen,
+  viewMode,
   isRendering,
   onSettingsChange,
-  onTogglePreview,
+  onSetOriginal,
+  onSetPreview,
   onRender,
 }: {
   clip: ClipResult;
@@ -83,10 +84,11 @@ export function CaptionControls({
   captionedMediaUrl?: string;
   transcriptWords: TranscriptWord[];
   settings: CaptionSettings;
-  isPreviewOpen: boolean;
+  viewMode: "original" | "preview";
   isRendering: boolean;
   onSettingsChange: (settings: CaptionSettings) => void;
-  onTogglePreview: () => void;
+  onSetOriginal: () => void;
+  onSetPreview: () => void;
   onRender: () => void;
 }) {
   const canPreview = transcriptWords.length > 0;
@@ -96,11 +98,11 @@ export function CaptionControls({
   ) => onSettingsChange({ ...settings, [key]: value });
 
   return (
-    <div className="rounded-md border border-zinc-200 bg-white p-3">
+    <div className="rounded-md border border-border bg-card p-3">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-zinc-900">Captions</p>
-          <p className="text-xs text-zinc-500">
+          <p className="text-sm font-semibold text-foreground">Captions</p>
+          <p className="text-xs text-muted-foreground">
             {captionedMediaUrl ? "Captioned export ready" : `${clip.durationMs ? Math.round(clip.durationMs / 1000) : 0}s clip`}
           </p>
         </div>
@@ -108,24 +110,39 @@ export function CaptionControls({
           <button
             type="button"
             onClick={() => onSettingsChange({ ...defaultCaptionSettings, style: settings.style })}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-200 text-zinc-700 transition hover:bg-zinc-50"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:bg-muted"
             aria-label="Reset caption controls"
           >
             <RotateCcw size={16} />
           </button>
           <button
             type="button"
-            onClick={onTogglePreview}
-            disabled={!canPreview}
-            className="inline-flex h-9 items-center rounded-md border border-zinc-200 px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onSetOriginal}
+            className={`inline-flex h-9 items-center rounded-md px-3 text-sm font-medium transition ${
+              viewMode === "original"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "border border-border text-foreground hover:bg-muted"
+            }`}
           >
-            {isPreviewOpen ? "Original" : "Preview"}
+            Original
+          </button>
+          <button
+            type="button"
+            onClick={onSetPreview}
+            disabled={!canPreview}
+            className={`inline-flex h-9 items-center rounded-md px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              viewMode === "preview"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "border border-border text-foreground hover:bg-muted"
+            }`}
+          >
+            Preview
           </button>
           <button
             type="button"
             onClick={onRender}
             disabled={isRendering}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isRendering ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             Render
@@ -262,8 +279,8 @@ function ControlGroup({
   title: string;
 }) {
   return (
-    <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
-      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-zinc-600">
+    <div className="rounded-md border border-border bg-muted p-3">
+      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-muted-foreground">
         {icon}
         {title}
       </div>
@@ -284,12 +301,12 @@ function SelectControl({
   value: string;
 }) {
   return (
-    <label className="grid gap-1 text-xs font-medium text-zinc-600">
+    <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-950 outline-none focus:border-zinc-500"
+        className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-zinc-500"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -314,9 +331,9 @@ function ColorPicker({
 }) {
   return (
     <div className="grid gap-2">
-      <div className="flex items-center justify-between text-xs font-medium text-zinc-600">
+      <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
         <span>{label}</span>
-        <span className="font-mono text-[11px] text-zinc-500">{value}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{value}</span>
       </div>
       <div className="grid grid-cols-8 gap-2">
         {options.map((color) => {
@@ -326,12 +343,12 @@ function ColorPicker({
               key={`${label}-${color.value}`}
               type="button"
               onClick={() => onChange(color.value)}
-              className="relative h-7 rounded-md border border-zinc-200 ring-offset-2 transition hover:scale-105"
+              className="relative h-7 rounded-md border border-border ring-offset-2 transition hover:scale-105"
               style={{ backgroundColor: color.hex }}
               aria-label={`${label}: ${color.label}`}
             >
               {selected ? (
-                <span className="absolute inset-0 flex items-center justify-center text-zinc-950">
+                <span className="absolute inset-0 flex items-center justify-center text-foreground">
                   <Check size={14} strokeWidth={3} />
                 </span>
               ) : null}
@@ -361,10 +378,10 @@ function RangeControl({
   valueLabel: string;
 }) {
   return (
-    <label className="grid gap-2 text-xs font-medium text-zinc-600">
+    <label className="grid gap-2 text-xs font-medium text-muted-foreground">
       <span className="flex items-center justify-between gap-3">
         <span>{label}</span>
-        <span className="font-mono text-[11px] text-zinc-500">{valueLabel}</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{valueLabel}</span>
       </span>
       <input
         type="range"

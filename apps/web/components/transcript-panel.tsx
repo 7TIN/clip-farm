@@ -7,11 +7,11 @@ import type { TranscriptSegment } from "@/lib/types";
 
 export function TranscriptRow({ segment }: { segment: TranscriptSegment }) {
   return (
-    <article className="rounded-md border border-zinc-200 bg-white p-3">
-      <p className="mb-2 font-mono text-xs text-zinc-500">
+    <article className="rounded-md border border-border bg-card p-3">
+      <p className="mb-2 font-mono text-xs text-muted-foreground">
         {formatTime(segment.startMs)} - {formatTime(segment.endMs)}
       </p>
-      <p className="text-sm leading-6 text-zinc-800">{segment.text}</p>
+      <p className="text-sm leading-6 text-foreground">{segment.text}</p>
     </article>
   );
 }
@@ -26,7 +26,7 @@ export function TranscriptPanel({
   return (
     <section
       className={cn(
-        "rounded-lg border border-zinc-200 bg-white p-4 shadow-sm",
+        "rounded-lg border border-border bg-card p-4 shadow-sm",
         className,
       )}
     >
@@ -37,7 +37,7 @@ export function TranscriptPanel({
 
       <div className="max-h-[420px] space-y-3 overflow-auto pr-1 ">
         {segments.length === 0 ? (
-          <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
+          <div className="rounded-md border border-dashed border-border bg-muted p-4 text-sm text-muted-foreground">
             Timestamped transcript segments will appear here.
           </div>
         ) : null}

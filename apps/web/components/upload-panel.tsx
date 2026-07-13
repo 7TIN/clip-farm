@@ -25,7 +25,7 @@ export function ReframeControls({
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Aspect ratio
         </span>
         <select
@@ -33,7 +33,7 @@ export function ReframeControls({
           onChange={(event) =>
             onAspectRatioChange(event.target.value as AspectRatio)
           }
-          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
         >
           <option value="9:16">9:16 Shorts</option>
           <option value="16:9">16:9 Wide</option>
@@ -43,7 +43,7 @@ export function ReframeControls({
       </label>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Mode
         </span>
         <select
@@ -51,7 +51,7 @@ export function ReframeControls({
           onChange={(event) =>
             onReframeModeChange(event.target.value as ReframeMode)
           }
-          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
         >
           <option value="normal">Normal FFmpeg</option>
           <option value="smart">AI face center</option>
@@ -59,7 +59,7 @@ export function ReframeControls({
       </label>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Smart layout
         </span>
         <select
@@ -68,7 +68,7 @@ export function ReframeControls({
             onSmartLayoutChange(event.target.value as SmartReframeLayout)
           }
           disabled={reframeMode !== "smart"}
-          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm disabled:bg-muted disabled:text-muted-foreground"
         >
           <option value="single">One speaker</option>
           <option value="split">Split both</option>
@@ -76,7 +76,7 @@ export function ReframeControls({
       </label>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Normal style
         </span>
         <select
@@ -85,7 +85,7 @@ export function ReframeControls({
             onNormalStrategyChange(event.target.value as NormalReframeStrategy)
           }
           disabled={reframeMode === "smart"}
-          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm disabled:bg-muted disabled:text-muted-foreground"
         >
           <option value="crop">Crop</option>
           <option value="blur-background">Blur background</option>
@@ -132,7 +132,7 @@ export function UploadPanel({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+      className="rounded-lg border border-border bg-card p-4 shadow-sm"
     >
       <div className="mb-4 flex items-center gap-2">
         <UploadCloud className="size-5 text-emerald-700" />
@@ -140,25 +140,25 @@ export function UploadPanel({
       </div>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Video file
         </span>
         <input
           type="file"
           accept="video/*"
           onChange={(event) => onFileChange(event.target.files?.[0] || null)}
-          className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white"
+          className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
         />
       </label>
 
       <label className="mt-4 block">
-        <span className="mb-2 block text-sm font-medium text-zinc-700">
+        <span className="mb-2 block text-sm font-medium text-muted-foreground">
           Transcript language
         </span>
         <select
           value={language}
           onChange={(event) => onLanguageChange(event.target.value)}
-          className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
+          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
         >
           <option value="en">English</option>
           <option value="hi">Hindi</option>
@@ -183,7 +183,7 @@ export function UploadPanel({
       <button
         type="submit"
         disabled={!file || isUploading || isBusy}
-        className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isUploading ? (
           <Loader2 className="size-4 animate-spin" />
@@ -194,7 +194,7 @@ export function UploadPanel({
       </button>
 
       {file ? (
-        <p className="mt-3 truncate text-xs text-zinc-500">
+        <p className="mt-3 truncate text-xs text-muted-foreground">
           Selected: {file.name}
         </p>
       ) : null}

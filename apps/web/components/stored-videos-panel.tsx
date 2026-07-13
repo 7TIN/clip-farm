@@ -28,7 +28,7 @@ export function StoredVideosPanel({
           type="button"
           onClick={onRefresh}
           disabled={isLoading}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200 bg-white px-2.5 text-xs font-medium text-emerald-800 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200 bg-card px-2.5 text-xs font-medium text-emerald-800 disabled:opacity-50"
         >
           {isLoading ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -41,7 +41,7 @@ export function StoredVideosPanel({
 
       <div className="max-h-56 space-y-2 overflow-auto pr-1">
         {videos.length === 0 ? (
-          <p className="rounded-md border border-emerald-200 bg-white p-3 text-sm text-emerald-800">
+          <p className="rounded-md border border-emerald-200 bg-card p-3 text-sm text-emerald-800">
             No processed videos found in local storage yet.
           </p>
         ) : null}
@@ -51,16 +51,16 @@ export function StoredVideosPanel({
             key={video.id}
             type="button"
             onClick={() => onSelect(video.id)}
-            className={`w-full rounded-md border bg-white p-3 text-left transition hover:border-emerald-500 ${
+            className={`w-full rounded-md border bg-card p-3 text-left transition hover:border-emerald-500 ${
               activeVideoId === video.id
                 ? "border-emerald-600"
                 : "border-emerald-200"
             }`}
           >
-            <span className="block truncate text-sm font-medium text-zinc-900">
+            <span className="block truncate text-sm font-medium text-foreground">
               {video.title}
             </span>
-            <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-600">
+            <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{video.status.replaceAll("_", " ")}</span>
               <span>{video.clipCount} clips</span>
               {video.durationMs ? (

@@ -22,13 +22,13 @@ export function StatusPanel({
         : job;
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <RefreshCw className="size-5 text-amber-700" />
         <h2 className="text-base font-semibold">Status</h2>
       </div>
 
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-emerald-600 transition-all"
           style={{ width: `${active?.progress || 0}%` }}
@@ -37,14 +37,14 @@ export function StatusPanel({
 
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium capitalize text-zinc-800">
+          <p className="text-sm font-medium capitalize text-foreground">
             {active?.status?.replaceAll("_", " ") || "Idle"}
           </p>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-muted-foreground">
             {error || active?.error || active?.message || "Waiting for upload."}
           </p>
         </div>
-        <span className="text-sm font-medium text-zinc-500">
+        <span className="text-sm font-medium text-muted-foreground">
           {active?.progress || 0}%
         </span>
       </div>

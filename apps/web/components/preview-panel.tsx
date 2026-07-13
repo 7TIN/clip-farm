@@ -21,14 +21,14 @@ function ReframeJobsList({
   onDelete: (settings: ReframeSettings) => void;
 }) {
   return (
-    <div className="mt-4 rounded-md border border-zinc-200 bg-white p-3">
+    <div className="mt-4 rounded-md border border-border bg-card p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-sm font-semibold">Reframe jobs</p>
         <button
           type="button"
           onClick={onRefresh}
           disabled={isLoading}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground disabled:opacity-50"
         >
           {isLoading ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -41,7 +41,7 @@ function ReframeJobsList({
 
       <div className="max-h-48 space-y-2 overflow-auto pr-1">
         {jobs.length === 0 ? (
-          <p className="rounded-md border border-dashed border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-500">
+          <p className="rounded-md border border-dashed border-border bg-muted p-3 text-sm text-muted-foreground">
             No saved reframe jobs for this video.
           </p>
         ) : null}
@@ -49,13 +49,13 @@ function ReframeJobsList({
         {jobs.map((job) => (
           <div
             key={job.jobId}
-            className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3"
+            className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-zinc-900">
+              <p className="truncate text-sm font-medium text-foreground">
                 {formatSettings(job.settings)}
               </p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {job.status} - {job.clipFileCount} files
               </p>
             </div>
@@ -63,7 +63,7 @@ function ReframeJobsList({
               type="button"
               onClick={() => onDelete(job.settings)}
               disabled={isDeleting}
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-muted disabled:opacity-50"
               title="Delete this reframe variant"
             >
               {isDeleting ? (
@@ -132,7 +132,7 @@ export function PreviewPanel({
   const firstClip = job?.result?.clips[0];
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Film className="size-5 text-sky-700" />
@@ -140,7 +140,7 @@ export function PreviewPanel({
         </div>
         <div className="flex items-center gap-2">
           {job?.result?.transcript.durationMs ? (
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-muted-foreground">
               {formatTime(job.result.transcript.durationMs)}
             </span>
           ) : null}
@@ -149,7 +149,7 @@ export function PreviewPanel({
             onClick={() => setIsSettingsOpen((value) => !value)}
             disabled={!job?.result}
             title="Update clip framing"
-            className="inline-flex size-8 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Settings2 className="size-4" />
           </button>
@@ -160,16 +160,16 @@ export function PreviewPanel({
         <video
           src={originalVideoUrl}
           controls
-          className="aspect-video w-full rounded-md bg-black"
+          className="aspect-video w-full rounded-md bg-background"
         />
       ) : (
-        <div className="flex aspect-video items-center justify-center rounded-md border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500">
+        <div className="flex aspect-video items-center justify-center rounded-md border border-dashed border-border bg-muted text-sm text-muted-foreground">
           Upload a video or open a stored one.
         </div>
       )}
 
       {isSettingsOpen && job?.result ? (
-        <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+        <div className="mt-4 rounded-md border border-border bg-muted p-3">
           <div className="mb-3 flex items-center gap-2">
             <Sparkles className="size-4 text-sky-700" />
             <p className="text-sm font-semibold">Update rendered clips</p>
@@ -189,7 +189,7 @@ export function PreviewPanel({
               type="button"
               onClick={onReframe}
               disabled={isReframing}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isReframing ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -202,7 +202,7 @@ export function PreviewPanel({
               type="button"
               onClick={() => onDeleteReframe()}
               disabled={isCleaningReframes}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isCleaningReframes ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -215,7 +215,7 @@ export function PreviewPanel({
               type="button"
               onClick={onRepairClips}
               disabled={isRepairingClips}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRepairingClips ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -236,7 +236,7 @@ export function PreviewPanel({
       ) : null}
 
       {job?.result?.video ? (
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
           <MetaChip
             label="File"
             value={job.result.video.originalFilename || job.videoId}
