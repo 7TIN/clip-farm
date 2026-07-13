@@ -38,12 +38,6 @@ export function ClipCard({
     position: clip.captionPosition || "bottom",
     maxWordsPerPage: 6,
     maxPageDurationMs: 1800,
-    textBehind: {
-      enabled: false,
-      color: "#ffffff",
-      fontFamily: "Inter",
-      words: [],
-    },
   });
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const isThisCaptioning =

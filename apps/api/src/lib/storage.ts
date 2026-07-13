@@ -11,10 +11,7 @@ import type {
   VideoMetadata,
 } from "../types";
 
-const rootDir = path.resolve(import.meta.dir, "../../../../");
-
-// const rootDir = path.resolve(import.meta.dir, "../../..");
-
+const rootDir = path.resolve(import.meta.dir, "../../..");
 export const storageRoot = path.join(rootDir, "storage");
 export const tmpRoot = path.join(storageRoot, "tmp");
 

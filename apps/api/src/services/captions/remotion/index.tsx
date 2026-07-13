@@ -11,12 +11,6 @@ const defaultProps: CaptionedClipProps = {
   position: "bottom",
   maxWordsPerPage: 6,
   maxPageDurationMs: 1800,
-  textBehind: {
-    enabled: false,
-    color: "#ffffff",
-    fontFamily: "Inter",
-    words: [],
-  },
   width: 1080,
   height: 1920,
   fps: 30,
