@@ -391,9 +391,7 @@ function withCaptionPublicUrls(job: CaptionJobState) {
   return {
     ...job,
     result: {
-      ...job.result,
-      originalVideoUrl: `/videos/${job.videoId}/original`,
-      clips: job.result.clips.map((clip) => withClipUrl(job.videoId, clip)),
+      clip: withClipUrl(job.videoId, job.result.clip),
     },
   };
 }

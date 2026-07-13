@@ -26,9 +26,23 @@ export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5";
 export type ReframeMode = "normal" | "smart";
 export type NormalReframeStrategy = "crop" | "blur-background" | "pad";
 export type SmartReframeLayout = "single" | "split";
-export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
+export type CaptionStylePreset =
+  | "basic"
+  | "hormozi"
+  | "bubbly"
+  | "aesthetic"
+  | "editorial"
+  | "punchy"
+  | "minimal";
 export type CaptionEffect = "none" | "magic";
-export type CaptionPosition = "top" | "center" | "bottom";
+export type CaptionPosition =
+  | "top"
+  | "center"
+  | "bottom"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
 
 export type ReframeSettings = {
   aspectRatio: AspectRatio;
@@ -45,6 +59,20 @@ export type CaptionSettings = {
   position: CaptionPosition;
   maxWordsPerPage: number;
   maxPageDurationMs: number;
+  specialFontColor: string;
+  normalColor: string;
+  mutedColor: string;
+  stylishFrequency: number;
+  verticalFrequency: number;
+  boldFrequency: number;
+  maxWordsPerScene: 2 | 3 | 4;
+  normalFontSize: number;
+  stylishFontSize: number;
+  formalFontSize: number;
+  boldFontSize: number;
+  normalFontWeight: number;
+  formalFontWeight: number;
+  boldFontWeight: number;
 };
 
 export type TranscriptSegment = {
@@ -132,7 +160,9 @@ export type CaptionJobState = {
   progress: number;
   message: string;
   error?: string;
-  result?: ProcessResult;
+  result?: {
+    clip: ClipResult;
+  };
 };
 
 export type StoredVideoSummary = {

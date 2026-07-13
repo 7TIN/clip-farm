@@ -75,22 +75,30 @@ async function processCaptionJob(job: CaptionJobState) {
     });
 
     await updateCaptionJob(job, "preparing", 96, "Updating clip JSON.");
-    const updatedClips = clips.map((item) =>
-      isSameClip(item, job.clipId, job.renderVersion)
-        ? {
+    let updatedClip: ClipJson | undefined;
+    const updatedClips = clips.map((item) => {
+      if (isSameClip(item, job.clipId, job.renderVersion)) {
+        updatedClip = {
             ...item,
             captionedOutputPath: output.outputPath,
             captionStyle: job.settings.style,
             captionEffect: job.settings.effect,
             captionPosition: job.settings.position,
             captionRenderVersion: output.captionRenderVersion,
-          }
-        : item,
-    );
+          };
+        return updatedClip;
+      }
+
+      return item;
+    });
+
+    if (!updatedClip) {
+      throw new Error("Caption render finished, but clip JSON could not be updated.");
+    }
 
     await writeJsonFile(paths.clipsJson, updatedClips);
     await writeMainJob(job.videoId, metadata, transcript, updatedClips);
-    await completeCaptionJob(job, updatedClips);
+    await completeCaptionJob(job, updatedClip);
   } catch (error) {
     await failCaptionJob(job, error);
   }
@@ -141,7 +149,7 @@ async function updateCaptionJob(
   });
 }
 
-async function completeCaptionJob(original: CaptionJobState, clips: ClipJson[]) {
+async function completeCaptionJob(original: CaptionJobState, clip: ClipJson) {
   const existing = await readCaptionJob(original.videoId, original.jobId);
   if (!existing) {
     return;
@@ -153,7 +161,7 @@ async function completeCaptionJob(original: CaptionJobState, clips: ClipJson[]) 
     progress: 100,
     message: "Caption render complete.",
     updatedAt: new Date().toISOString(),
-    result: { clips },
+    result: { clip },
   });
 }
 

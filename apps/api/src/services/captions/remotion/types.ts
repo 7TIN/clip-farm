@@ -1,4 +1,13 @@
-import type { CaptionEffect, CaptionPosition, CaptionStylePreset } from "../../../types";
+import type { CaptionSettings, TranscriptSegment } from "../../../types";
+
+export type CaptionedClipProps = CaptionSettings & {
+  clipSrc: string;
+  transcript: TranscriptSegment[];
+  width: number;
+  height: number;
+  fps: number;
+  durationInFrames: number;
+};
 
 export type CaptionToken = {
   text: string;
@@ -6,20 +15,6 @@ export type CaptionToken = {
   endMs: number;
   timestampMs: number;
   confidence: number;
-};
-
-export type CaptionedClipProps = {
-  clipSrc: string;
-  captions: CaptionToken[];
-  style: CaptionStylePreset;
-  effect: CaptionEffect;
-  position: CaptionPosition;
-  maxWordsPerPage: number;
-  maxPageDurationMs: number;
-  width: number;
-  height: number;
-  fps: number;
-  durationInFrames: number;
 };
 
 export type CaptionPage = {

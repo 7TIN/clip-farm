@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { absoluteApiUrl, formatTime, formatMode } from "@/lib/api";
+import { absoluteApiUrl } from "@/lib/api";
 import type { CaptionJobState, ClipResult, TranscriptSegment, TranscriptWord } from "@/lib/types";
-import type { CaptionSettings } from "@/components/caption-preview";
-import { MetaChip } from "./meta-chip";
-import { CaptionControls } from "./caption-controls";
+import { CaptionPreviewPlayer, type CaptionSettings } from "@/components/caption-preview";
+import { CaptionControls, defaultCaptionSettings } from "./caption-controls";
 import { TranscriptRow } from "./transcript-panel";
 
 export function ClipCard({
@@ -33,11 +32,10 @@ export function ClipCard({
   const mediaUrl = absoluteApiUrl(clip.mediaUrl);
   const captionedMediaUrl = absoluteApiUrl(clip.captionedMediaUrl);
   const [captionSettings, setCaptionSettings] = useState<CaptionSettings>({
-    style: clip.captionStyle || "hormozi",
-    effect: clip.captionEffect || "magic",
-    position: clip.captionPosition || "bottom",
-    maxWordsPerPage: 6,
-    maxPageDurationMs: 1800,
+    ...defaultCaptionSettings,
+    style: clip.captionStyle || defaultCaptionSettings.style,
+    effect: clip.captionEffect || defaultCaptionSettings.effect,
+    position: clip.captionPosition || defaultCaptionSettings.position,
   });
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const isThisCaptioning =
@@ -66,10 +64,21 @@ export function ClipCard({
       </div>
 
       <div className={`grid gap-4 ${layoutClass}`}>
-        <div className={`w-fit`}>
-          {mediaUrl ? (
+        <div className="w-fit">
+          {mediaUrl && isPreviewOpen ? (
+            <div
+              className={`overflow-hidden rounded-md bg-black ${clip.aspectRatio === "9:16" ? "max-w-60" : ""} ${clip.aspectRatio === "4:5" ? "max-w-sm" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}
+            >
+              <CaptionPreviewPlayer
+                clipSrc={mediaUrl}
+                clip={clip}
+                words={transcriptWords}
+                settings={captionSettings}
+              />
+            </div>
+          ) : mediaUrl ? (
             <video
-              src={mediaUrl}
+              src={captionedMediaUrl || mediaUrl}
               controls
               className={`aspect-auto w-full rounded-md bg-black ${clip.aspectRatio === "16:9" ? "w-full" : ""} ${clip.aspectRatio === "9:16" ? "max-w-60 " : ""} ${clip.aspectRatio === "4:5" ? "max-w-sm" : ""} ${clip.aspectRatio === "1:1" ? "max-w-120" : ""}`}
             />
@@ -81,42 +90,20 @@ export function ClipCard({
         </div>
 
         <div className="grid content-start gap-3">
-          <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            <MetaChip label="Start" value={formatTime(clip.startMs)} />
-            <MetaChip label="End" value={formatTime(clip.endMs)} />
-            <MetaChip label="Duration" value={formatTime(clip.durationMs)} />
-            <MetaChip label="Ratio" value={clip.aspectRatio || "Original"} />
-            <MetaChip label="Mode" value={formatMode(clip)} />
-            <MetaChip
-              label="Output"
-              value={
-                clip.outputWidth && clip.outputHeight
-                  ? `${clip.outputWidth}x${clip.outputHeight}`
-                  : "MP4"
-              }
-            />
-          </div>
-
-          <p className="rounded-md bg-zinc-50 p-3 text-sm leading-6 text-zinc-700">
-            {segments[0]?.text ||
-              clip.transcriptText ||
-              "Transcript unavailable."}
-          </p>
+          <CaptionControls
+            clip={clip}
+            mediaUrl={mediaUrl}
+            captionedMediaUrl={captionedMediaUrl}
+            transcriptWords={transcriptWords}
+            settings={captionSettings}
+            isPreviewOpen={isPreviewOpen}
+            isRendering={isThisCaptioning}
+            onSettingsChange={setCaptionSettings}
+            onTogglePreview={() => setIsPreviewOpen((value) => !value)}
+            onRender={() => onRenderCaptions(clip, captionSettings)}
+          />
         </div>
       </div>
-
-      <CaptionControls
-        clip={clip}
-        mediaUrl={mediaUrl}
-        captionedMediaUrl={captionedMediaUrl}
-        transcriptWords={transcriptWords}
-        settings={captionSettings}
-        isPreviewOpen={isPreviewOpen}
-        isRendering={isThisCaptioning}
-        onSettingsChange={setCaptionSettings}
-        onTogglePreview={() => setIsPreviewOpen((value) => !value)}
-        onRender={() => onRenderCaptions(clip, captionSettings)}
-      />
 
       <button
         type="button"

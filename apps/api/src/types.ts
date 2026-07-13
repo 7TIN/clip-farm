@@ -132,11 +132,25 @@ export type TranscriptWord = {
   speakerLabel?: string;
 };
 
-export type CaptionStylePreset = "basic" | "hormozi" | "bubbly";
+export type CaptionStylePreset =
+  | "basic"
+  | "hormozi"
+  | "bubbly"
+  | "aesthetic"
+  | "editorial"
+  | "punchy"
+  | "minimal";
 
 export type CaptionEffect = "none" | "magic";
 
-export type CaptionPosition = "top" | "center" | "bottom";
+export type CaptionPosition =
+  | "top"
+  | "center"
+  | "bottom"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
 
 export type CaptionSettings = {
   style: CaptionStylePreset;
@@ -144,6 +158,20 @@ export type CaptionSettings = {
   position: CaptionPosition;
   maxWordsPerPage: number;
   maxPageDurationMs: number;
+  specialFontColor: string;
+  normalColor: string;
+  mutedColor: string;
+  stylishFrequency: number;
+  verticalFrequency: number;
+  boldFrequency: number;
+  maxWordsPerScene: 2 | 3 | 4;
+  normalFontSize: number;
+  stylishFontSize: number;
+  formalFontSize: number;
+  boldFontSize: number;
+  normalFontWeight: number;
+  formalFontWeight: number;
+  boldFontWeight: number;
 };
 
 export type CaptionToken = {
@@ -162,7 +190,7 @@ export type CaptionJobStatus =
   | "failed";
 
 export type CaptionJobResult = {
-  clips: ClipJson[];
+  clip: ClipJson;
 };
 
 export type CaptionJobState = {

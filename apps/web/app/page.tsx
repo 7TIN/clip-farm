@@ -199,14 +199,24 @@ export default function Home() {
           setCaptionJob(payload);
 
           if (payload.status === "complete") {
-            if (payload.result) {
-              setJob({
-                jobId: `cached_${payload.videoId}`,
-                videoId: payload.videoId,
-                status: "complete",
-                progress: 100,
-                message: "Processing complete.",
-                result: payload.result,
+            if (payload.result?.clip) {
+              setJob((current) => {
+                if (!current?.result) {
+                  return current;
+                }
+
+                return {
+                  ...current,
+                  result: {
+                    ...current.result,
+                    clips: current.result.clips.map((clip) =>
+                      clip.id === payload.result.clip.id &&
+                      clip.renderVersion === payload.result.clip.renderVersion
+                        ? payload.result.clip
+                        : clip,
+                    ),
+                  },
+                };
               });
             }
             break;

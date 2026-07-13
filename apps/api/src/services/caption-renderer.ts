@@ -9,7 +9,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 
 import { captionSettingsSlug } from "../config/caption-settings";
-import { wordsForClip } from "./caption-words";
+import { captionSegmentsForClip } from "./caption-words";
 import { readClipMediaDetails } from "../lib/ffmpeg";
 import { videoPaths } from "../lib/storage";
 import type { CaptionSettings, ClipJson, TranscriptJson } from "../types";
@@ -43,9 +43,9 @@ export async function renderCaptionedClip({
 
   await onProgress?.(8, "Reading clip media details.");
   const media = await readClipMediaDetails(clip.outputPath);
-  const captions = wordsForClip(transcript, clip);
+  const captionTranscript = captionSegmentsForClip(transcript, clip);
 
-  if (captions.length === 0) {
+  if (captionTranscript.length === 0) {
     throw new Error("No timestamped words were found for this clip.");
   }
 
@@ -62,12 +62,26 @@ export async function renderCaptionedClip({
   try {
     const inputProps = {
       clipSrc: fileServer.url,
-      captions,
+      transcript: captionTranscript,
       style: settings.style,
       effect: settings.effect,
       position: settings.position,
       maxWordsPerPage: settings.maxWordsPerPage,
       maxPageDurationMs: settings.maxPageDurationMs,
+      specialFontColor: settings.specialFontColor,
+      normalColor: settings.normalColor,
+      mutedColor: settings.mutedColor,
+      stylishFrequency: settings.stylishFrequency,
+      verticalFrequency: settings.verticalFrequency,
+      boldFrequency: settings.boldFrequency,
+      maxWordsPerScene: settings.maxWordsPerScene,
+      normalFontSize: settings.normalFontSize,
+      stylishFontSize: settings.stylishFontSize,
+      formalFontSize: settings.formalFontSize,
+      boldFontSize: settings.boldFontSize,
+      normalFontWeight: settings.normalFontWeight,
+      formalFontWeight: settings.formalFontWeight,
+      boldFontWeight: settings.boldFontWeight,
       width: media.width,
       height: media.height,
       fps: media.fps,
